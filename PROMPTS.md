@@ -4,7 +4,7 @@ Dated record of AI-assisted tasks. Do not invent errors, test results, or commit
 
 ---
 
-## 2026-10-21 — Task 3: Scaffold TrustVault application
+## Task 1: Scaffold TrustVault application
 
 ### Prompt summary
 
@@ -82,11 +82,11 @@ Scaffold complete. No authentication, document APIs, database tables, or R2 inte
 
 ---
 
-## 2026-10-21 — Task 4: PostgreSQL schema via Alembic
+## Task 2: PostgreSQL schema via Alembic
 
 ### Prompt summary
 
-Create TrustVault PostgreSQL schema with SQLAlchemy models and Alembic migrations for `users`, `documents`, `document_permissions`, and `audit_events`. Connect with `DATABASE_URL` only. No auth/document APIs. Prefer local `trustvault_db`; Railway URL is for deployment reference.
+Create TrustVault PostgreSQL schema with SQLAlchemy models and Alembic migrations for `users`, `documents`, `document_permissions`, and `audit_events`. Connect with `DATABASE_URL` only. No auth/document APIs. Prefer local `trustvault_db`; Railway URL is for deployment reference. Manually created the tables in Railway
 
 ### Approach
 
@@ -119,8 +119,38 @@ Actual results:
 - Migration `7afa3a6e7e04` applied to local `trustvault_db`
 - Tables present: `users`, `documents`, `document_permissions`, `audit_events`, `alembic_version`
 - Partial unique index `uq_document_permissions_active_document_user` present
-- pytest: **15 passed**, 1 Starlette/httpx deprecation warning
+- pytest: **15 passed**
 
 ### Outcome
 
-Schema and migrations verified locally. No authentication, document APIs, seeds, or Railway remote migration from this machine.
+Schema and migrations verified locally and in Railway.
+
+---
+
+## Task 3: Private Cloudflare R2 storage service
+
+### Prompt summary
+
+Implement a reusable private R2 storage service with boto3, env-based config, safe errors, SHA-256 support, and mocked tests. No document API endpoints.
+
+### Files created or updated
+
+- `backend/app/storage/` — exceptions, config, keys, hashing, `R2StorageService`
+- `backend/app/core/config.py` — R2 settings fields
+- `backend/tests/test_r2_storage.py`
+- `backend/requirements.txt` — `boto3`
+- `backend/.env.example`, `backend/README.md`, `PROMPTS.md`
+
+### Verification
+
+```text
+cd backend
+pip install -r requirements.txt
+pytest -v
+```
+
+Actual result: **29 passed** .
+
+### Outcome
+
+Private R2 storage service implemented with mocked tests only. Not tested against a real Cloudflare bucket. No document HTTP endpoints added.

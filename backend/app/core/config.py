@@ -15,6 +15,7 @@ class Settings(BaseSettings):
         env_file=".env",
         env_file_encoding="utf-8",
         extra="ignore",
+        populate_by_name=True,
     )
 
     app_name: str = "TrustVault"
@@ -25,6 +26,13 @@ class Settings(BaseSettings):
         alias="CORS_ORIGINS",
     )
     database_url: str = Field(alias="DATABASE_URL")
+
+    # Cloudflare R2 — optional until a storage operation is attempted.
+    r2_account_id: str | None = Field(default=None, alias="R2_ACCOUNT_ID")
+    r2_access_key_id: str | None = Field(default=None, alias="R2_ACCESS_KEY_ID")
+    r2_secret_access_key: str | None = Field(default=None, alias="R2_SECRET_ACCESS_KEY")
+    r2_bucket_name: str | None = Field(default=None, alias="R2_BUCKET_NAME")
+    r2_endpoint_url: str | None = Field(default=None, alias="R2_ENDPOINT_URL")
 
     @field_validator("database_url")
     @classmethod

@@ -4,8 +4,9 @@ FastAPI + Python. Current surface:
 
 - `GET /health`
 - SQLAlchemy models and Alembic migrations for PostgreSQL schema
+- Private Cloudflare R2 storage service (`app.storage`) — no document HTTP APIs yet
 
-Authentication, document APIs, grants, and R2 are not implemented yet.
+Authentication, document upload/download endpoints, and grants are not implemented yet.
 
 ## Setup
 
