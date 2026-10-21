@@ -200,7 +200,7 @@ This is my working log. I used Cursor to help write code, but I gave the rules, 
 2. Temporarily skipped `require_document_read` on download → same test **failed** (`200 == 404`).
 3. Restored secure code → test + `tests/security/` → **passed**.
 
-**How I checked:** `pytest tests/security/` (18 passed after fixes); authz demo as above; full suite run recorded in the completion report. Commit: see git log for Task 16 message.
+**How I checked:** `pytest tests/security/` (18 passed after fixes); authz demo as above; full suite run recorded in the completion report. Commit: `04e20c7` (Add security regression matrix and complete threat documentation).
 
 ---
 
