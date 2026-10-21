@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 
 import { useAuth } from "@/components/auth-provider";
 import { ConfirmDialog } from "@/components/confirm-dialog";
@@ -17,15 +18,25 @@ import {
 } from "@/components/document-table";
 import { useDocumentActions } from "@/hooks/use-document-actions";
 import { useDocumentList } from "@/hooks/use-document-list";
+import { getPostLoginPath } from "@/lib/nav";
 
 export default function MyDocumentsPage() {
   const { user } = useAuth();
+  const router = useRouter();
   const [filters, setFilters] = useState<DocumentFilterValues>({
     title: "",
     category: "",
     createdFrom: "",
     createdTo: "",
   });
+
+  useEffect(() => {
+    if (!user) return;
+    // VIEWER accounts do not upload/own via the product workflow.
+    if (user.role === "VIEWER") {
+      router.replace(getPostLoginPath(user.role));
+    }
+  }, [router, user]);
 
   const listParams = useMemo(
     () => ({
@@ -39,10 +50,19 @@ export default function MyDocumentsPage() {
     [filters, user?.id],
   );
 
-  const list = useDocumentList(listParams, { enabled: Boolean(user) });
+  const list = useDocumentList(listParams, {
+    enabled: Boolean(user) && user?.role !== "VIEWER",
+  });
   const actions = useDocumentActions(() => list.refresh());
 
   if (!user) return null;
+  if (user.role === "VIEWER") {
+    return (
+      <p className="text-sm text-muted" role="status">
+        Redirecting to shared documents…
+      </p>
+    );
+  }
 
   return (
     <div className="space-y-5">

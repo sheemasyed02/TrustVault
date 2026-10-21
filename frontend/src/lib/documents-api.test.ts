@@ -62,6 +62,7 @@ describe("listDocumentsRequest", () => {
               mime_type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
               file_size: 10,
               created_at: "2026-10-21T12:00:00+00:00",
+              your_access: "READ",
             },
           ],
           page: 1,
@@ -73,9 +74,11 @@ describe("listDocumentsRequest", () => {
       ),
     );
 
-    const data = await listDocumentsRequest("tok", {});
+    const data = await listDocumentsRequest("tok", { shared_only: true });
     expect(data.results).toHaveLength(1);
     expect(data.results[0]?.title).toBe("From API");
+    expect(data.results[0]?.your_access).toBe("READ");
     expect(data.total).toBe(1);
+    expect(String(vi.mocked(fetch).mock.calls[0]![0])).toContain("shared_only=true");
   });
 });

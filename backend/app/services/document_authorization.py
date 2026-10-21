@@ -372,7 +372,13 @@ def evaluate_document_access(
 
 
 def caller_access_level(context: DocumentAccessContext) -> str:
-    """Return OWNER, EDIT, or READ for API/UI capability hints."""
+    """Return document-level access for API/UI capability hints.
+
+    Values are ``OWNER`` (document owner via ``documents.owner_id``), ``EDIT``,
+    or ``READ`` (active grant). These are **not** platform roles
+    (``users.role`` ADMIN/OWNER/VIEWER). A grant never promotes a user to
+    platform OWNER or ADMIN.
+    """
     if context.is_owner:
         return "OWNER"
     if context.grant_permission == "EDIT":

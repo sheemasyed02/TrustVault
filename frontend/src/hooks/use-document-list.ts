@@ -33,6 +33,7 @@ function filtersKey(params: DocumentListParams): string {
     category: params.category ?? "",
     created_from: params.created_from ?? "",
     created_to: params.created_to ?? "",
+    shared_only: params.shared_only === true,
     page_size: params.page_size ?? 20,
   });
 }
@@ -76,6 +77,7 @@ export function useDocumentList(
       category: params.category,
       created_from: params.created_from,
       created_to: params.created_to,
+      shared_only: params.shared_only,
       page: effectivePage,
       page_size: params.page_size ?? 20,
     };
@@ -118,6 +120,7 @@ export function useDocumentList(
     params.category,
     params.created_from,
     params.created_to,
+    params.shared_only,
     params.page_size,
   ]);
 

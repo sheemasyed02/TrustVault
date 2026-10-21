@@ -4,6 +4,7 @@ import { useEffect, useId, useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 
 import { useAuth } from "@/components/auth-provider";
+import { getPostLoginPath } from "@/lib/nav";
 
 export function LoginEntry() {
   const router = useRouter();
@@ -20,7 +21,7 @@ export function LoginEntry() {
 
   useEffect(() => {
     if (status === "authenticated" && user) {
-      router.replace("/dashboard");
+      router.replace(getPostLoginPath(user.role));
     }
   }, [status, user, router]);
 

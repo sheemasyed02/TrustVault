@@ -222,6 +222,10 @@ def list_documents(
     category: str | None = Query(default=None),
     created_from: datetime | None = Query(default=None),
     created_to: datetime | None = Query(default=None),
+    shared_only: bool = Query(
+        default=False,
+        description="When true, return only documents shared with the caller (not owned)",
+    ),
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=20, ge=1, le=100),
     current_user: User = Depends(get_current_user),
@@ -233,6 +237,7 @@ def list_documents(
 
     Visibility is ownership or an active READ/EDIT grant. ADMIN role alone does
     not expand the result set. Filters never reveal inaccessible documents.
+    Each row includes ``your_access`` (OWNER | EDIT | READ) from PostgreSQL.
     """
     request_id = (x_request_id or str(uuid.uuid4())).strip() or str(uuid.uuid4())
     try:
@@ -243,6 +248,7 @@ def list_documents(
             category=category,
             created_from=created_from,
             created_to=created_to,
+            shared_only=shared_only,
             page=page,
             page_size=page_size,
         )
@@ -269,8 +275,13 @@ def list_documents(
         request_id=request_id,
     )
     total_pages = math.ceil(result.total / result.page_size) if result.total else 0
-    return DocumentListResponse(
-        results=[
+    rows: list[DocumentListItem] = []
+    for doc in result.items:
+        access = result.access_by_document_id.get(doc.id)
+        if access is None:
+            # Fail closed: never return a row without a resolved access level.
+            continue
+        rows.append(
             DocumentListItem(
                 id=doc.id,
                 title=doc.title,
@@ -280,9 +291,11 @@ def list_documents(
                 mime_type=doc.mime_type,
                 file_size=doc.file_size,
                 created_at=doc.created_at,
+                your_access=access,
             )
-            for doc in result.items
-        ],
+        )
+    return DocumentListResponse(
+        results=rows,
         page=result.page,
         page_size=result.page_size,
         total=result.total,

@@ -253,7 +253,41 @@ This is my working log. I used Cursor to help write code, but I gave the rules, 
 
 **Fixes:** commit on successful requests; load `backend/.env` via an absolute path; commit soft-delete tombstones before certain 503 paths; regression tests for commit/rollback and cwd-independent settings. Live R2 put/get/delete smoke succeeded with existing backend credentials (values not logged).
 
-**Checks:** backend pytest **176 passed**; frontend **43 passed**, lint (font warning only), build OK. 
+**Checks:** backend pytest **176 passed**; frontend **43 passed**, lint (font warning only), build OK.
+
+---
+
+## Task 18 — Permission audit vs hackathon role model (2026-10-21)
+
+**What I asked for:** Audit ADMIN/OWNER/VIEWER vs document READ/EDIT; fix mismatches; regression tests; update PERMISSIONS/API docs. No hosting/deploy changes.
+
+**What was found:** Backend already enforced the intended model (ADMIN no content by default; grants ≠ platform roles; revoke on next request). Main clarity gap was `your_access: OWNER` looking like a platform role promotion.
+
+**What was built/fixed:** Role-vs-grant docs/UI labels; `tests/security/test_role_permission_separation.py`.
+
+**How I checked:** pytest security + authz suites **133 passed**; frontend document-access/nav **8 passed**.
+
+---
+
+## Task 19 — Role-aware UI workflows (2026-10-21)
+
+**What I asked for:** Post-login role homes; OWNER/VIEWER/ADMIN workflows with real APIs; READ vs EDIT badges; revoke clears client content; admin integrity from API `valid`; tests + build. No template rewrite / deploy.
+
+**Backend gap closed (required for Shared With Me badges):**
+- `GET /documents` now returns `your_access` per row
+- `shared_only=true` filters to non-owned grants (pagination-safe Shared With Me)
+
+**Frontend:**
+- Login → ADMIN `/admin`, OWNER `/dashboard`, VIEWER `/shared`
+- Role-specific nav (admin overview/users/audit/integrity; owner docs/upload; viewer shared only)
+- Shared list shows READ/EDIT badges; recipients never get Delete
+- Document detail re-fetches on tab focus and clears state on 404/revoke
+- Owner dashboard uses real owned + shared_only counts
+
+**How I checked:**
+- `pytest tests/security/test_document_list_access.py tests/security/test_role_permission_separation.py tests/test_document_access.py` — **39 passed**
+- `npm test -- --run` — **59 passed** (16 files)
+- `npm run build` — **succeeded** (Next.js 16.4.2)
 
 ---
 
@@ -277,5 +311,26 @@ This is my working log. I used Cursor to help write code, but I gave the rules, 
 | 14 | Durable audit + admin APIs | Hash chain; advisory lock; ADMIN list/verify |
 | 15 | Admin dashboard UI | Real summary/users/audit; last-admin lockout guard |
 | 16 | Security matrix + THREATS | IDOR demo fails when authz removed; docs honesty |
+| 18 | Permission audit | Confirmed server authz; clarified role vs grant |
+| 19 | Role-aware workflows | List `your_access` + `shared_only`; role homes/nav |
+| 20 | Acceptance + authz demo | ACCEPTANCE.md; journey tests; demo fail then restore |
 
 I still review diffs, run tests myself, and refuse fake “all green” claims when a run actually failed.
+
+---
+
+## Task 20 — Acceptance verification + authz-removal demo (2026-10-21)
+
+**What I asked for:** Acceptance checklist mapping brief → tests; E2E journey; search/upload/R2 checks; controlled authz-removal demo; full validation; readiness report; commit docs/fixes only. No deploy / DB provider change.
+
+**What was built:**
+- `ACCEPTANCE.md` requirement matrix with PASS/FAIL/NOT VERIFIED and evidence
+- `tests/security/test_acceptance_journey.py` (owner share/revoke/EDIT/admin/deactivate + search non-leak)
+- README link to ACCEPTANCE; THREATS Task 20 demo re-run note
+
+**Authz-removal demo (not committed):**
+1. Baseline unauthorized download → **passed** (404)
+2. Temporary direct `session.get(Document)` on download → test **failed** (`assert 200 == 404`)
+3. Restored `require_document_read` → IDOR + `tests/security/` → **34 passed**
+
+**How I checked:** (exact counts in completion report / ACCEPTANCE evidence log)

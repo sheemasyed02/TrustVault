@@ -37,6 +37,7 @@ class DocumentListFilters:
     category: str | None = None
     created_from: datetime | None = None
     created_to: datetime | None = None
+    shared_only: bool = False
     page: int = 1
     page_size: int = DEFAULT_PAGE_SIZE
 
@@ -47,6 +48,7 @@ class DocumentListResult:
     total: int
     page: int
     page_size: int
+    access_by_document_id: dict[uuid.UUID, str]
 
 
 def _escape_like(value: str) -> str:
@@ -61,6 +63,7 @@ def validate_list_filters(
     category: str | None,
     created_from: datetime | None,
     created_to: datetime | None,
+    shared_only: bool = False,
     page: int,
     page_size: int,
 ) -> DocumentListFilters:
@@ -103,6 +106,11 @@ def validate_list_filters(
             "created_from must be <= created_to",
             reason_code="INVALID_DATE_RANGE",
         )
+    if owner_id is not None and shared_only:
+        raise DocumentListValidationError(
+            "shared_only cannot be combined with owner_id",
+            reason_code="INVALID_SHARED_ONLY_FILTER",
+        )
     return DocumentListFilters(
         title=clean_title,
         owner_id=owner_id,
@@ -110,6 +118,7 @@ def validate_list_filters(
         category=clean_category,
         created_from=created_from,
         created_to=created_to,
+        shared_only=bool(shared_only),
         page=page,
         page_size=page_size,
     )
@@ -131,13 +140,71 @@ def accessible_documents_query(user: User) -> Select[tuple[Document]]:
     )
 
 
+def shared_documents_query(user: User) -> Select[tuple[Document]]:
+    """Non-deleted docs with an active grant where the caller is not the owner."""
+    active_grant = exists(
+        select(DocumentPermission.id).where(
+            DocumentPermission.document_id == Document.id,
+            DocumentPermission.user_id == user.id,
+            DocumentPermission.revoked_at.is_(None),
+            DocumentPermission.permission.in_(("READ", "EDIT")),
+        )
+    )
+    return select(Document).where(
+        Document.deleted_at.is_(None),
+        Document.owner_id != user.id,
+        active_grant,
+    )
+
+
+def resolve_list_access_levels(
+    session: Session,
+    *,
+    user: User,
+    documents: list[Document],
+) -> dict[uuid.UUID, str]:
+    """Map document id → OWNER | EDIT | READ for the caller (trusted DB state)."""
+    levels: dict[uuid.UUID, str] = {}
+    need_grants: list[uuid.UUID] = []
+    for doc in documents:
+        if doc.owner_id == user.id:
+            levels[doc.id] = "OWNER"
+        else:
+            need_grants.append(doc.id)
+    if not need_grants:
+        return levels
+
+    grants = list(
+        session.scalars(
+            select(DocumentPermission).where(
+                DocumentPermission.document_id.in_(need_grants),
+                DocumentPermission.user_id == user.id,
+                DocumentPermission.revoked_at.is_(None),
+            )
+        ).all()
+    )
+    by_doc = {grant.document_id: grant.permission for grant in grants}
+    for doc_id in need_grants:
+        permission = by_doc.get(doc_id)
+        if permission == "EDIT":
+            levels[doc_id] = "EDIT"
+        elif permission == "READ":
+            levels[doc_id] = "READ"
+        # Accessible query already requires a grant; omit ambiguous rows.
+    return levels
+
+
 def list_accessible_documents(
     session: Session,
     *,
     user: User,
     filters: DocumentListFilters,
 ) -> DocumentListResult:
-    query = accessible_documents_query(user)
+    query = (
+        shared_documents_query(user)
+        if filters.shared_only
+        else accessible_documents_query(user)
+    )
 
     if filters.title:
         pattern = f"%{_escape_like(filters.title)}%"
@@ -168,9 +235,13 @@ def list_accessible_documents(
     items = list(
         session.scalars(ordered.offset(offset).limit(filters.page_size)).unique().all()
     )
+    access_by_document_id = resolve_list_access_levels(
+        session, user=user, documents=items
+    )
     return DocumentListResult(
         items=items,
         total=total,
         page=filters.page,
         page_size=filters.page_size,
+        access_by_document_id=access_by_document_id,
     )

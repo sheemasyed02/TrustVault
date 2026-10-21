@@ -17,9 +17,8 @@ import { useDocumentActions } from "@/hooks/use-document-actions";
 import { useDocumentList } from "@/hooks/use-document-list";
 
 /**
- * Shared With Me reuses GET /documents (no dedicated shared endpoint).
- * We show rows where owner.id !== current user. Permission level (READ/EDIT)
- * is not returned by the list API yet — that is a backend gap.
+ * Shared With Me — GET /documents?shared_only=true.
+ * Rows include your_access (READ | EDIT) from PostgreSQL.
  */
 export default function SharedWithMePage() {
   const { user } = useAuth();
@@ -32,6 +31,7 @@ export default function SharedWithMePage() {
 
   const listParams = useMemo(
     () => ({
+      shared_only: true,
       title: filters.title.trim() || undefined,
       category: filters.category.trim() || undefined,
       created_from: toApiDateBound(filters.createdFrom, false),
@@ -44,11 +44,6 @@ export default function SharedWithMePage() {
   const list = useDocumentList(listParams, { enabled: Boolean(user) });
   const actions = useDocumentActions(() => list.refresh());
 
-  const sharedOnPage = useMemo(() => {
-    if (!user) return [];
-    return list.results.filter((doc) => doc.owner.id !== user.id);
-  }, [list.results, user]);
-
   if (!user) return null;
 
   return (
@@ -58,12 +53,12 @@ export default function SharedWithMePage() {
           Shared with me
         </p>
         <h1 className="mt-2 font-display text-3xl tracking-tight">
-          Documents others shared with you
+          Documents shared with your account
         </h1>
         <p className="mt-2 max-w-2xl text-sm text-muted">
-          The backend has no separate Shared With Me route. This page calls the
-          authorized list API, then shows only documents you do not own. READ vs
-          EDIT labels are unavailable until the API returns grant level.
+          Only documents with an active READ or EDIT grant appear here. Access
+          badges come from the server. After a grant is revoked, refresh or open
+          the document again — the next API request is denied.
         </p>
       </header>
 
@@ -72,6 +67,11 @@ export default function SharedWithMePage() {
       {actions.actionError ? (
         <p role="alert" className="text-sm text-danger">
           {actions.actionError}
+        </p>
+      ) : null}
+      {actions.actionMessage ? (
+        <p role="status" className="text-sm text-accent-strong">
+          {actions.actionMessage}
         </p>
       ) : null}
 
@@ -95,49 +95,31 @@ export default function SharedWithMePage() {
         </div>
       ) : null}
 
-      {list.status === "ready" || list.status === "empty" ? (
-        sharedOnPage.length === 0 ? (
-          <div className="rounded-xl border border-dashed border-border bg-surface px-6 py-10 text-center">
-            <p className="font-medium text-foreground">
-              No shared documents on this page
-            </p>
-            <p className="mt-2 text-sm text-muted">
-              {list.total === 0
-                ? "Nothing has been shared with you yet (authorized list is empty)."
-                : "This server page may only contain documents you own. Try Next, or clear filters."}
-            </p>
-            {list.totalPages > 1 ? (
-              <div className="mt-4">
-                <PaginationBar
-                  page={list.page}
-                  totalPages={list.totalPages}
-                  total={list.total}
-                  onPageChange={list.setPage}
-                />
-              </div>
-            ) : null}
-          </div>
-        ) : (
-          <>
-            <p className="text-xs text-muted">
-              Showing {sharedOnPage.length} shared document(s) from this API page
-              (server page total includes owned docs too: {list.total}).
-            </p>
-            <DocumentTable
-              documents={sharedOnPage}
-              currentUser={user}
-              mode="shared"
-              downloadingId={actions.downloadingId}
-              onDownload={(doc) => void actions.download(doc)}
-            />
-            <PaginationBar
-              page={list.page}
-              totalPages={list.totalPages}
-              total={list.total}
-              onPageChange={list.setPage}
-            />
-          </>
-        )
+      {list.status === "empty" ? (
+        <div className="rounded-xl border border-dashed border-border bg-surface px-6 py-10 text-center">
+          <p className="font-medium text-foreground">No shared documents</p>
+          <p className="mt-2 text-sm text-muted">
+            When an owner grants you READ or EDIT access, documents appear here.
+          </p>
+        </div>
+      ) : null}
+
+      {list.status === "ready" ? (
+        <>
+          <DocumentTable
+            documents={list.results}
+            currentUser={user}
+            mode="shared"
+            downloadingId={actions.downloadingId}
+            onDownload={(doc) => void actions.download(doc)}
+          />
+          <PaginationBar
+            page={list.page}
+            totalPages={list.totalPages}
+            total={list.total}
+            onPageChange={list.setPage}
+          />
+        </>
       ) : null}
     </div>
   );

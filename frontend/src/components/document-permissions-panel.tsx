@@ -176,12 +176,13 @@ export function DocumentPermissionsPanel({
     >
       <h2 className="font-display text-xl text-foreground">Sharing</h2>
       <p className="mt-1 text-sm text-muted">
-        <strong className="font-semibold text-foreground">READ</strong> allows
-        viewing and download.{" "}
-        <strong className="font-semibold text-foreground">EDIT</strong> also
-        allows metadata changes. Only you (the owner) can share or revoke.
-        Revocation blocks the next server request; copies already downloaded
-        locally are outside TrustVault control.
+        <strong className="font-semibold text-foreground">READ</strong> and{" "}
+        <strong className="font-semibold text-foreground">EDIT</strong> are
+        per-document grants — they do not change the recipient&apos;s platform
+        role (ADMIN / OWNER / VIEWER). READ allows viewing and download; EDIT
+        also allows metadata changes. Only you (the document owner) can share
+        or revoke. Revocation blocks the next server request; copies already
+        downloaded locally are outside TrustVault control.
       </p>
 
       <form

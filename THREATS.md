@@ -200,6 +200,8 @@ Evaluators may remove an authorization check. We verified detection as follows (
 4. Restored `require_document_read` immediately.
 5. Re-ran the same test + `tests/security/` → **passed**.
 
+Re-executed in **Task 20** with the same outcome (baseline pass → vulnerable fail `200 == 404` → restore → **34 passed** for IDOR + `tests/security/`). Vulnerable edit was never committed.
+
 Command used:
 
 ```powershell

@@ -28,6 +28,9 @@ export interface DocumentOwnerSummary {
   email: string;
 }
 
+/** Effective document access for the authenticated caller (from PostgreSQL). */
+export type DocumentAccessLevel = "OWNER" | "EDIT" | "READ";
+
 export interface DocumentListItem {
   id: string;
   title: string;
@@ -37,6 +40,8 @@ export interface DocumentListItem {
   mime_type: string;
   file_size: number;
   created_at: string;
+  /** Document-level access from PostgreSQL (OWNER | EDIT | READ). */
+  your_access: DocumentAccessLevel;
 }
 
 export interface DocumentListResponse {
@@ -46,9 +51,6 @@ export interface DocumentListResponse {
   total: number;
   total_pages: number;
 }
-
-/** Effective document access for the authenticated caller (from PostgreSQL). */
-export type DocumentAccessLevel = "OWNER" | "EDIT" | "READ";
 
 export interface DocumentDetail {
   id: string;
@@ -79,6 +81,8 @@ export interface DocumentListParams {
   category?: string;
   created_from?: string;
   created_to?: string;
+  /** When true, only documents shared with the caller (not owned). */
+  shared_only?: boolean;
   page?: number;
   page_size?: number;
 }
@@ -311,6 +315,7 @@ export async function listDocumentsRequest(
     category: params.category,
     created_from: params.created_from,
     created_to: params.created_to,
+    shared_only: params.shared_only === true ? "true" : undefined,
     page: params.page,
     page_size: params.page_size,
   });

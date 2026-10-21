@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 
 import { useAuth, useHandleUnauthorized } from "@/components/auth-provider";
 import {
@@ -10,28 +11,41 @@ import {
   type DocumentListItem,
 } from "@/lib/api";
 import { formatDateTime } from "@/lib/format";
+import { getPostLoginPath } from "@/lib/nav";
 
 interface SummaryState {
   status: "loading" | "ready" | "error";
   ownedTotal: number | null;
-  accessibleTotal: number | null;
+  sharedTotal: number | null;
   recent: DocumentListItem[];
   error: string | null;
 }
 
+/**
+ * Owner document-management dashboard.
+ * ADMIN / VIEWER are redirected to their role homes.
+ */
 export default function DashboardPage() {
   const { user, accessToken } = useAuth();
+  const router = useRouter();
   const handleUnauthorized = useHandleUnauthorized();
   const [summary, setSummary] = useState<SummaryState>({
     status: "loading",
     ownedTotal: null,
-    accessibleTotal: null,
+    sharedTotal: null,
     recent: [],
     error: null,
   });
 
   useEffect(() => {
-    if (!accessToken || !user) return;
+    if (!user) return;
+    if (user.role !== "OWNER") {
+      router.replace(getPostLoginPath(user.role));
+    }
+  }, [router, user]);
+
+  useEffect(() => {
+    if (!accessToken || !user || user.role !== "OWNER") return;
     const token = accessToken;
     const currentUser = user;
     const controller = new AbortController();
@@ -39,7 +53,7 @@ export default function DashboardPage() {
     async function load() {
       setSummary((prev) => ({ ...prev, status: "loading", error: null }));
       try {
-        const [owned, accessible] = await Promise.all([
+        const [owned, shared] = await Promise.all([
           listDocumentsRequest(
             token,
             { owner_id: currentUser.id, page: 1, page_size: 5 },
@@ -47,15 +61,15 @@ export default function DashboardPage() {
           ),
           listDocumentsRequest(
             token,
-            { page: 1, page_size: 5 },
+            { shared_only: true, page: 1, page_size: 5 },
             controller.signal,
           ),
         ]);
         setSummary({
           status: "ready",
           ownedTotal: owned.total,
-          accessibleTotal: accessible.total,
-          recent: accessible.results,
+          sharedTotal: shared.total,
+          recent: owned.results,
           error: null,
         });
       } catch (error) {
@@ -64,7 +78,7 @@ export default function DashboardPage() {
         setSummary({
           status: "error",
           ownedTotal: null,
-          accessibleTotal: null,
+          sharedTotal: null,
           recent: [],
           error:
             error instanceof ApiError
@@ -78,24 +92,26 @@ export default function DashboardPage() {
     return () => controller.abort();
   }, [accessToken, handleUnauthorized, user]);
 
-  const sharedEstimate =
-    summary.ownedTotal !== null && summary.accessibleTotal !== null
-      ? Math.max(0, summary.accessibleTotal - summary.ownedTotal)
-      : null;
+  if (!user || user.role !== "OWNER") {
+    return (
+      <p className="text-sm text-muted" role="status">
+        Redirecting to your workspace…
+      </p>
+    );
+  }
 
   return (
     <div className="space-y-6">
       <header>
         <p className="text-sm font-semibold uppercase tracking-[0.18em] text-accent-strong">
-          Dashboard
+          Owner dashboard
         </p>
         <h1 className="mt-2 font-display text-3xl tracking-tight text-foreground">
-          Welcome, {user?.name}
+          Welcome, {user.name}
         </h1>
         <p className="mt-2 max-w-2xl text-sm leading-6 text-muted">
-          Counts below come from the document list API totals (server-authorized).
-          There is no separate activity feed endpoint yet, so recent items use the
-          newest accessible documents.
+          Manage documents you own, upload new files, and share READ or EDIT
+          access with registered users. Counts come from the authorized list API.
         </p>
       </header>
 
@@ -113,37 +129,65 @@ export default function DashboardPage() {
           label="Documents you own"
           value={summary.ownedTotal}
           loading={summary.status === "loading"}
-          hint="GET /documents?owner_id=you → total"
+          hint="GET /documents?owner_id=you"
         />
         <SummaryCard
-          label="Shared with you (estimate)"
-          value={sharedEstimate}
+          label="Shared with you"
+          value={summary.sharedTotal}
           loading={summary.status === "loading"}
-          hint="accessible total minus owned total (no dedicated shared endpoint)"
+          hint="GET /documents?shared_only=true"
         />
-        <SummaryCard
-          label="All accessible"
-          value={summary.accessibleTotal}
-          loading={summary.status === "loading"}
-          hint="GET /documents → total"
-        />
+        <article className="rounded-xl border border-border bg-surface p-4 shadow-[var(--shadow)]">
+          <p className="text-xs font-semibold uppercase tracking-wide text-muted">
+            Quick actions
+          </p>
+          <div className="mt-3 flex flex-col gap-2 text-sm">
+            <Link
+              href="/documents/upload"
+              className="font-semibold text-accent-strong hover:underline"
+            >
+              Upload a document
+            </Link>
+            <Link
+              href="/documents"
+              className="font-semibold text-accent-strong hover:underline"
+            >
+              My Documents
+            </Link>
+            <Link
+              href="/shared"
+              className="font-semibold text-accent-strong hover:underline"
+            >
+              Shared with me
+            </Link>
+          </div>
+        </article>
       </section>
 
       <section className="rounded-xl border border-border bg-surface p-5 shadow-[var(--shadow)]">
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <h2 className="font-display text-xl text-foreground">Recent documents</h2>
+          <h2 className="font-display text-xl text-foreground">
+            Recent owned documents
+          </h2>
           <Link
             href="/documents"
             className="text-sm font-semibold text-accent-strong hover:underline"
           >
-            View my documents
+            View all
           </Link>
         </div>
         {summary.status === "loading" ? (
           <p className="mt-4 text-sm text-muted">Loading recent documents…</p>
         ) : summary.recent.length === 0 ? (
           <p className="mt-4 text-sm text-muted">
-            No accessible documents yet. Owners can upload in a later task screen.
+            No owned documents yet.{" "}
+            <Link
+              href="/documents/upload"
+              className="font-semibold text-accent-strong hover:underline"
+            >
+              Upload your first file
+            </Link>
+            .
           </p>
         ) : (
           <ul className="mt-4 divide-y divide-border">

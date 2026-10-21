@@ -1,7 +1,15 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useState, type FormEvent } from "react";
+import { useSearchParams } from "next/navigation";
+import {
+  Suspense,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type FormEvent,
+} from "react";
 
 import { useAuth, useHandleUnauthorized } from "@/components/auth-provider";
 import {
@@ -33,8 +41,24 @@ const emptyFilters: FilterState = {
 };
 
 export default function AdminAuditPage() {
+  return (
+    <Suspense
+      fallback={
+        <p className="text-sm text-muted" role="status">
+          Loading audit log…
+        </p>
+      }
+    >
+      <AdminAuditPageContent />
+    </Suspense>
+  );
+}
+
+function AdminAuditPageContent() {
   const { accessToken } = useAuth();
   const handleUnauthorized = useHandleUnauthorized();
+  const searchParams = useSearchParams();
+  const integritySectionRef = useRef<HTMLElement | null>(null);
   const [filters, setFilters] = useState<FilterState>(emptyFilters);
   const [applied, setApplied] = useState<FilterState>(emptyFilters);
   const [page, setPage] = useState(1);
@@ -94,6 +118,11 @@ export default function AdminAuditPage() {
     return () => controller.abort();
   }, [accessToken, applied, load]);
 
+  useEffect(() => {
+    if (searchParams.get("focus") !== "integrity") return;
+    integritySectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }, [searchParams]);
+
   function onApplyFilters(event: FormEvent) {
     event.preventDefault();
     setApplied({ ...filters });
@@ -139,33 +168,47 @@ export default function AdminAuditPage() {
             local timezone; the API stores UTC.
           </p>
         </div>
-        <div className="flex flex-wrap gap-2">
-          <button
-            type="button"
-            onClick={() => void load(page, applied)}
-            className="rounded-md border border-border px-3 py-2 text-sm font-semibold hover:bg-accent-soft"
-          >
-            Refresh
-          </button>
+        <button
+          type="button"
+          onClick={() => void load(page, applied)}
+          className="rounded-md border border-border px-3 py-2 text-sm font-semibold hover:bg-accent-soft"
+        >
+          Refresh
+        </button>
+      </header>
+
+      <section
+        ref={integritySectionRef}
+        id="audit-integrity"
+        className="rounded-xl border border-border bg-surface p-5 shadow-[var(--shadow)]"
+      >
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h2 className="font-display text-xl text-foreground">
+              Audit chain integrity
+            </h2>
+            <p className="mt-1 text-sm text-muted">
+              A green valid badge is shown only when the API returns{" "}
+              <code className="text-xs">valid: true</code>.
+            </p>
+          </div>
           <button
             type="button"
             onClick={() => void onVerify()}
             disabled={verifying}
-            className="rounded-md bg-accent px-3 py-2 text-sm font-semibold text-white hover:bg-accent-strong disabled:opacity-60"
+            className="rounded-md bg-accent px-4 py-2 text-sm font-semibold text-white hover:bg-accent-strong disabled:opacity-60"
           >
             {verifying ? "Verifying…" : "Verify chain"}
           </button>
         </div>
-      </header>
-
       {integrityError ? (
-        <p role="alert" className="text-sm text-danger">
+        <p role="alert" className="mt-3 text-sm text-danger">
           {integrityError}
         </p>
       ) : null}
       {integrity ? (
         <div
-          className={`rounded-xl border px-4 py-3 text-sm ${
+          className={`mt-3 rounded-xl border px-4 py-3 text-sm ${
             integrity.valid
               ? "border-accent/30 bg-accent-soft/40 text-foreground"
               : "border-danger/30 bg-danger/5 text-danger"
@@ -187,7 +230,12 @@ export default function AdminAuditPage() {
               : ""}
           </p>
         </div>
-      ) : null}
+      ) : (
+        <p className="mt-3 text-sm text-muted">
+          No verification run yet in this session.
+        </p>
+      )}
+      </section>
 
       <form
         onSubmit={onApplyFilters}

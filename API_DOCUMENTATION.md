@@ -159,7 +159,7 @@ Not accepted as authoritative (ignored if sent): `owner_id`, `storage_key`, chec
     "name": "Sheema Owner",
     "email": "sheema@trustvault.demo"
   },
-  "mime_type": "application/pdf",
+  "mime_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
   "file_size": 12345,
   "sha256_checksum": "<hex>",
   "created_at": "2026-10-21T12:00:00+00:00"
@@ -201,10 +201,13 @@ Access filtering is applied in the PostgreSQL query before results are returned.
 | `owner_email` | Normalized email; only intersects with already-visible documents |
 | `category` | Exact match; max 128 characters |
 | `created_from` / `created_to` | Inclusive ISO-8601 datetimes; `created_from` ≤ `created_to` |
+| `shared_only` | When `true`, only documents shared with the caller (not owned). Cannot combine with `owner_id` |
 | `page` | ≥ 1 (default 1) |
 | `page_size` | 1–100 (default 20) |
 
 Stable order: `created_at DESC`, `id DESC`.
+
+Each row includes **`your_access`** (`OWNER` \| `EDIT` \| `READ`) from current PostgreSQL ownership/grants. This is document-level access, not the caller's platform role.
 
 **Response `200`**
 
@@ -220,9 +223,10 @@ Stable order: `created_at DESC`, `id DESC`.
         "name": "Sheema Owner",
         "email": "sheema@trustvault.demo"
       },
-      "mime_type": "application/pdf",
+      "mime_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
       "file_size": 12345,
-      "created_at": "2026-10-21T12:00:00+00:00"
+      "created_at": "2026-10-21T12:00:00+00:00",
+      "your_access": "READ"
     }
   ],
   "page": 1,
@@ -240,13 +244,15 @@ Authenticated. Returns safe metadata after centralized **read** authorization (`
 
 Includes: title, category, description, owner summary, mime type, size, SHA-256 checksum, `created_at`, `updated_at`, and **`your_access`** (`OWNER` | `EDIT` | `READ`) derived from the current PostgreSQL ownership/grant row for the caller.
 
+**`your_access` is document-level, not a platform role.** It does not change `users.role`. Values:
+
+- `OWNER` — caller is `documents.owner_id` (not “promoted” to platform OWNER)
+- `EDIT` — active EDIT grant (metadata/content edit; no share/delete)
+- `READ` — active READ grant (view/download only)
+
+Platform roles (`ADMIN` / `OWNER` / `VIEWER`) remain separate. Sharing never elevates a recipient to ADMIN or OWNER. Platform ADMIN without ownership or a grant still receives **404** for this route.
+
 Never returns `storage_key`, credentials, or file bytes.
-
-UI capability rules (server still enforces on every mutation):
-
-- `OWNER` — view, edit content/metadata, share, delete
-- `EDIT` — view, edit content/metadata (no share/delete)
-- `READ` — view and download only
 
 | Status | Meaning |
 | --- | --- |
@@ -526,7 +532,12 @@ Empty chain returns `valid=true` with `reason_code=EMPTY_CHAIN`. There is **no**
 
 ## Security testing
 
-Automated authorization and IDOR regressions live in `backend/tests/security/` (owner / READ / EDIT / unrelated / ADMIN matrix, revocation, deactivation, mass-assignment, audit gates). Broader suites remain under `backend/tests/test_document_*.py`, `test_audit_trail.py`, and `test_admin_users.py`. Threat mitigations and residual risks: `THREATS.md`. How to reproduce an authorization-removal demo: `README.md`.
+Automated authorization and IDOR regressions live in `backend/tests/security/`:
+
+- `test_security_matrix.py` — owner / READ / EDIT / unrelated / ADMIN matrix, revocation, deactivation, mass-assignment, audit gates
+- `test_role_permission_separation.py` — platform role vs document grant; ADMIN audit without content; grant does not promote roles; disabled accounts; forged IDs/role fields
+
+Broader suites remain under `backend/tests/test_document_*.py`, `test_audit_trail.py`, and `test_admin_users.py`. Threat mitigations and residual risks: `THREATS.md`. How to reproduce an authorization-removal demo: `README.md`.
 
 ## Planned (not implemented)
 

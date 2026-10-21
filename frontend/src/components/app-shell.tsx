@@ -1,20 +1,64 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
-import { useState, type ReactNode } from "react";
+import { usePathname, useSearchParams } from "next/navigation";
+import { Suspense, useState, type ReactNode } from "react";
 
 import { useAuth } from "@/components/auth-provider";
-import { getNavItemsForRole } from "@/lib/nav";
+import { getNavItemsForRole, isNavItemActive } from "@/lib/nav";
 
-export function AppShell({ children }: { children: ReactNode }) {
-  const { user, logout } = useAuth();
+function SidebarNav({
+  menuOpen,
+  setMenuOpen,
+}: {
+  menuOpen: boolean;
+  setMenuOpen: (open: boolean) => void;
+}) {
+  const { user } = useAuth();
   const pathname = usePathname();
-  const [menuOpen, setMenuOpen] = useState(false);
-
+  const searchParams = useSearchParams();
   if (!user) return null;
 
   const items = getNavItemsForRole(user.role);
+  const focus = searchParams.get("focus");
+
+  return (
+    <nav
+      id="app-sidebar-nav"
+      aria-label="Workspace"
+      className={`${menuOpen ? "mt-4 flex" : "hidden"} flex-col gap-1 md:mt-6 md:flex`}
+    >
+      {items.map((item) => {
+        let active = isNavItemActive(pathname, item.href);
+        if (item.href.includes("focus=integrity")) {
+          active = pathname === "/admin/audit" && focus === "integrity";
+        } else if (item.href === "/admin/audit") {
+          active = pathname === "/admin/audit" && focus !== "integrity";
+        }
+        return (
+          <Link
+            key={item.label}
+            href={item.href}
+            onClick={() => setMenuOpen(false)}
+            className={`rounded-md px-3 py-2 text-sm font-medium focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent ${
+              active
+                ? "bg-accent-soft text-accent-strong"
+                : "text-foreground hover:bg-white/70"
+            }`}
+          >
+            {item.label}
+          </Link>
+        );
+      })}
+    </nav>
+  );
+}
+
+export function AppShell({ children }: { children: ReactNode }) {
+  const { user, logout } = useAuth();
+  const [menuOpen, setMenuOpen] = useState(false);
+
+  if (!user) return null;
 
   return (
     <div className="mx-auto flex w-full max-w-6xl flex-1 flex-col gap-6 px-4 py-6 md:flex-row md:px-8 md:py-8">
@@ -35,31 +79,9 @@ export function AppShell({ children }: { children: ReactNode }) {
           </button>
         </div>
 
-        <nav
-          id="app-sidebar-nav"
-          aria-label="Workspace"
-          className={`${menuOpen ? "mt-4 flex" : "hidden"} flex-col gap-1 md:mt-6 md:flex`}
-        >
-          {items.map((item) => {
-            const active =
-              pathname === item.href ||
-              (item.href !== "/dashboard" && pathname.startsWith(item.href));
-            return (
-              <Link
-                key={item.label}
-                href={item.href}
-                onClick={() => setMenuOpen(false)}
-                className={`rounded-md px-3 py-2 text-sm font-medium focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent ${
-                  active
-                    ? "bg-accent-soft text-accent-strong"
-                    : "text-foreground hover:bg-white/70"
-                }`}
-              >
-                {item.label}
-              </Link>
-            );
-          })}
-        </nav>
+        <Suspense fallback={<div className="mt-6 hidden md:block" aria-hidden />}>
+          <SidebarNav menuOpen={menuOpen} setMenuOpen={setMenuOpen} />
+        </Suspense>
 
         <div className="mt-6 hidden rounded-xl border border-border bg-surface p-4 text-sm md:block">
           <p className="font-medium text-foreground">{user.name}</p>

@@ -15,7 +15,10 @@ import {
   getDocumentRequest,
   type DocumentDetail,
 } from "@/lib/api";
-import { getDocumentUiAccess } from "@/lib/document-access";
+import {
+  formatDocumentAccessLabel,
+  getDocumentUiAccess,
+} from "@/lib/document-access";
 import { formatBytes, formatDateTime, mimeLabel } from "@/lib/format";
 
 export default function DocumentDetailPage() {
@@ -34,22 +37,31 @@ export default function DocumentDetailPage() {
 
   useEffect(() => {
     if (!accessToken || !params.documentId) return;
-    const controller = new AbortController();
+    let controller = new AbortController();
     const token = accessToken;
     const documentId = params.documentId;
 
-    void (async () => {
-      setStatus("loading");
-      setError(null);
-      setErrorStatus(null);
-      setDoc(null);
+    async function load(showLoading: boolean) {
+      if (showLoading) {
+        setStatus("loading");
+        setError(null);
+        setErrorStatus(null);
+        setDoc(null);
+      }
       try {
-        const data = await getDocumentRequest(token, documentId, controller.signal);
+        const data = await getDocumentRequest(
+          token,
+          documentId,
+          controller.signal,
+        );
         setDoc(data);
         setStatus("ready");
+        setError(null);
+        setErrorStatus(null);
       } catch (err: unknown) {
         if (err instanceof DOMException && err.name === "AbortError") return;
         if (handleUnauthorized(err)) return;
+        // Clear protected content immediately when access is denied/revoked.
         setDoc(null);
         if (err instanceof ApiError) {
           setError(err.detail);
@@ -60,22 +72,41 @@ export default function DocumentDetailPage() {
         }
         setStatus("error");
       }
-    })();
+    }
 
-    return () => controller.abort();
+    void load(true);
+
+    function onVisible() {
+      if (document.visibilityState !== "visible") return;
+      controller.abort();
+      controller = new AbortController();
+      void load(false);
+    }
+    document.addEventListener("visibilitychange", onVisible);
+
+    return () => {
+      controller.abort();
+      document.removeEventListener("visibilitychange", onVisible);
+    };
   }, [accessToken, handleUnauthorized, params.documentId]);
 
   if (!user) return null;
 
   const access = doc ? getDocumentUiAccess(user, doc) : null;
+  const backHref =
+    user.role === "VIEWER"
+      ? "/shared"
+      : access && !access.isOwner
+        ? "/shared"
+        : "/documents";
 
   return (
     <div className="space-y-5">
       <Link
-        href="/documents"
+        href={backHref}
         className="text-sm font-semibold text-accent-strong hover:underline"
       >
-        ← Back to documents
+        ← Back
       </Link>
 
       {status === "loading" ? (
@@ -115,7 +146,11 @@ export default function DocumentDetailPage() {
                   : `Shared by ${doc.owner.name} with READ access — view and download only.`}
             </p>
             <p className="mt-1 text-xs font-semibold uppercase tracking-wide text-accent-strong">
-              Your access: {access.yourAccess}
+              Document access: {formatDocumentAccessLabel(access.yourAccess)}
+              <span className="mt-1 block normal-case tracking-normal text-muted">
+                Separate from your platform role ({user.role}). Sharing never
+                changes ADMIN / OWNER / VIEWER.
+              </span>
             </p>
 
             <dl className="mt-6 grid gap-4 sm:grid-cols-2">

@@ -40,6 +40,8 @@ class DocumentListItem(BaseModel):
     mime_type: str
     file_size: int = Field(ge=0)
     created_at: datetime
+    # Document-level access for the caller (not users.role).
+    your_access: str = Field(description="OWNER, EDIT, or READ")
 
 
 class DocumentListResponse(BaseModel):
@@ -62,8 +64,11 @@ class DocumentDetailResponse(BaseModel):
     sha256_checksum: str
     created_at: datetime
     updated_at: datetime
-    # Caller's effective access from PostgreSQL (never trust client claims).
-    your_access: str = Field(description="OWNER, EDIT, or READ")
+    # Document-level access from PostgreSQL (never trust client claims).
+    # OWNER = documents.owner_id; EDIT/READ = active grant. Not users.role.
+    your_access: str = Field(
+        description="Document access: OWNER (owner_id), EDIT, or READ — not a platform role"
+    )
 
 
 class DocumentMetadataUpdateRequest(BaseModel):

@@ -7,6 +7,8 @@ import * as api from "@/lib/api";
 
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ replace: vi.fn(), push: vi.fn() }),
+  useSearchParams: () => new URLSearchParams(),
+  usePathname: () => "/admin/audit",
 }));
 
 const handleUnauthorized = vi.hoisted(() => () => false);

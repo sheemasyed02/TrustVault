@@ -2,6 +2,23 @@
 
 Status: **Authorization service implemented**. Document **upload**, **list/search**, **metadata**, **download**, **grant/revoke**, **metadata PATCH**, and **owner soft-delete** are implemented.
 
+## Platform role vs document grant (do not conflate)
+
+TrustVault uses **two independent concepts**:
+
+| Concept | Stored in | Values | Purpose |
+| --- | --- | --- | --- |
+| **Platform role** | `users.role` | `ADMIN`, `OWNER`, `VIEWER` | Who may upload (`OWNER`), who may use admin APIs (`ADMIN`), default UI navigation |
+| **Document ownership** | `documents.owner_id` | User UUID | Full control of that document (share/revoke/delete) |
+| **Document grant** | `document_permissions.permission` | `READ`, `EDIT` | Explicit share to a named user; never changes `users.role` |
+
+Rules:
+
+- Granting `READ` or `EDIT` does **not** promote the recipient to platform `OWNER` or `ADMIN`.
+- Platform `ADMIN` does **not** receive document content access by default.
+- API field `your_access` (`OWNER` \| `EDIT` \| `READ`) is **document-level** only. `your_access=OWNER` means `documents.owner_id == caller`, not `users.role == OWNER`.
+- Every protected document request reloads ownership and `revoked_at IS NULL` grants from PostgreSQL. JWTs are not a permission cache.
+
 ## Authentication vs authorization
 
 - **Authentication** (`get_current_user`): proves who the caller is (valid bearer token + active user in PostgreSQL).
@@ -13,11 +30,11 @@ Token role claims and client-supplied owner/permission fields are never treated 
 
 | Principal | List / discover | Read metadata / download | Edit metadata | Edit DOCX content (`PUT …/content`) | Grant / revoke | Soft-delete | Admin APIs |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| Document owner | Yes | Yes | Yes | Yes | Yes | Yes | No (unless role ADMIN) |
+| Document owner (`owner_id`) | Yes | Yes | Yes | Yes | Yes | Yes | No (unless platform role ADMIN) |
 | Active READ grant | Yes (that doc) | Yes | No | No | No | No | No |
 | Active EDIT grant | Yes (that doc) | Yes | Yes (title/category/description) | Yes | No | No | No |
 | No active grant | No | No | No | No | No | No | No |
-| ADMIN without grant | No | No | No | No | No | No | Yes (users/audit only) |
+| Platform ADMIN without grant | No | No | No | No | No | No | Yes (users/audit only) |
 | Inactive account | No protected actions | | | | | | |
 
 Denial policy: inaccessible documents → **404**; insufficient action with a visible relationship → **403**; unauthenticated/inactive → **401**.
@@ -61,6 +78,8 @@ Every protected check reloads grant state from PostgreSQL. JWTs are not permissi
 ### Listing and search visibility
 
 `accessible_documents_query`: non-deleted AND (owner OR active READ/EDIT grant). ADMIN alone does not expand visibility.
+
+`GET /documents` includes `your_access` per row. `shared_only=true` returns only granted (non-owned) documents for Shared With Me.
 
 ### Denial response policy
 
@@ -124,6 +143,8 @@ Durable SHA-256 hash chain in `audit_events` (`app.services.audit_trail`):
 - `tests/test_document_mutations.py` — PATCH/DELETE, R2 failure honesty, revoke-then-edit
 - `tests/test_user_search.py` — auth, matching, inactive/self exclusion, pagination, sensitive fields
 - `tests/test_audit_trail.py` — hash/link/tamper/empty/concurrent/admin filters/non-admin denial
+- `tests/security/test_security_matrix.py` — owner / READ / EDIT / unrelated / ADMIN matrix
+- `tests/security/test_role_permission_separation.py` — platform role ≠ document grant; Part 5 regressions
 
 ## Remaining gaps
 

@@ -129,6 +129,7 @@ This demonstration was executed during Task 16; the vulnerable edit was never co
 ## Documentation
 
 - [`AGENTS.md`](AGENTS.md) — product and agent rules
+- [`ACCEPTANCE.md`](ACCEPTANCE.md) — requirement → test → manual verification matrix
 - [`PERMISSIONS.md`](PERMISSIONS.md) — role / resource / action matrix
 - [`API_DOCUMENTATION.md`](API_DOCUMENTATION.md) — real HTTP routes
 - [`THREATS.md`](THREATS.md) — threat model and residual risks

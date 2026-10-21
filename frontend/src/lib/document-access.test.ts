@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 
-import { getDocumentUiAccess } from "@/lib/document-access";
+import {
+  formatDocumentAccessLabel,
+  getDocumentUiAccess,
+} from "@/lib/document-access";
 import type { DocumentDetail, UserPublic } from "@/lib/api";
 
 const owner: UserPublic = {
@@ -26,6 +29,14 @@ const baseDoc = {
   created_at: "2026-10-21T12:00:00+00:00",
   updated_at: "2026-10-21T12:00:00+00:00",
 } as const;
+
+describe("formatDocumentAccessLabel", () => {
+  it("distinguishes document access from platform roles", () => {
+    expect(formatDocumentAccessLabel("OWNER")).toBe("Document owner");
+    expect(formatDocumentAccessLabel("EDIT")).toBe("EDIT grant");
+    expect(formatDocumentAccessLabel("READ")).toBe("READ grant");
+  });
+});
 
 describe("getDocumentUiAccess", () => {
   it("gives owner full edit/share/delete", () => {
@@ -64,5 +75,27 @@ describe("getDocumentUiAccess", () => {
     expect(access.canEditDocument).toBe(false);
     expect(access.canManageSharing).toBe(false);
     expect(access.canDelete).toBe(false);
+  });
+
+  it("does not treat platform OWNER role as document ownership without your_access", () => {
+    const platformOwner: UserPublic = {
+      ...owner,
+      id: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+      role: "OWNER",
+    };
+    const doc: DocumentDetail = {
+      ...baseDoc,
+      your_access: "READ",
+      owner: {
+        id: "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb",
+        name: "Other",
+        email: "other@example.com",
+      },
+    };
+    const access = getDocumentUiAccess(platformOwner, doc);
+    expect(access.isOwner).toBe(false);
+    expect(access.canManageSharing).toBe(false);
+    expect(access.canDelete).toBe(false);
+    expect(access.canEditDocument).toBe(false);
   });
 });

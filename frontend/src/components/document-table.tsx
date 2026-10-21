@@ -2,7 +2,8 @@
 
 import Link from "next/link";
 
-import type { DocumentListItem, UserPublic } from "@/lib/api";
+import type { DocumentAccessLevel, DocumentListItem, UserPublic } from "@/lib/api";
+import { formatDocumentAccessLabel } from "@/lib/document-access";
 import { formatBytes, formatDateTime, mimeLabel } from "@/lib/format";
 
 interface DocumentTableProps {
@@ -27,6 +28,23 @@ export function DocumentTableSkeleton() {
   );
 }
 
+function AccessBadge({ level }: { level: DocumentAccessLevel }) {
+  const label = formatDocumentAccessLabel(level);
+  const tone =
+    level === "EDIT"
+      ? "bg-accent-soft text-accent-strong"
+      : level === "OWNER"
+        ? "bg-white text-foreground border border-border"
+        : "bg-white text-muted border border-border";
+  return (
+    <span
+      className={`inline-block rounded px-1.5 py-0.5 text-xs font-semibold ${tone}`}
+    >
+      {level === "OWNER" ? "Owner" : level}
+    </span>
+  );
+}
+
 export function DocumentTable({
   documents,
   currentUser,
@@ -42,6 +60,9 @@ export function DocumentTable({
           <tr>
             <th className="px-4 py-3 font-semibold">Title</th>
             <th className="px-4 py-3 font-semibold">Category</th>
+            {mode === "shared" || mode === "all" ? (
+              <th className="px-4 py-3 font-semibold">Your access</th>
+            ) : null}
             <th className="px-4 py-3 font-semibold">Type</th>
             <th className="px-4 py-3 font-semibold">Size</th>
             <th className="px-4 py-3 font-semibold">Created</th>
@@ -53,7 +74,9 @@ export function DocumentTable({
         </thead>
         <tbody>
           {documents.map((doc) => {
-            const isOwner = doc.owner.id === currentUser.id;
+            const isOwner =
+              doc.your_access === "OWNER" || doc.owner.id === currentUser.id;
+            const accessLabel = formatDocumentAccessLabel(doc.your_access);
             return (
               <tr key={doc.id} className="border-b border-border/70 last:border-0">
                 <td className="px-4 py-3 font-medium text-foreground">
@@ -63,8 +86,14 @@ export function DocumentTable({
                   >
                     {doc.title}
                   </Link>
+                  <span className="sr-only"> ({accessLabel})</span>
                 </td>
                 <td className="px-4 py-3 text-muted">{doc.category}</td>
+                {mode === "shared" || mode === "all" ? (
+                  <td className="px-4 py-3">
+                    <AccessBadge level={doc.your_access} />
+                  </td>
+                ) : null}
                 <td className="px-4 py-3 text-muted">{mimeLabel(doc.mime_type)}</td>
                 <td className="px-4 py-3 text-muted">
                   {formatBytes(doc.file_size)}
