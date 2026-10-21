@@ -524,9 +524,14 @@ Empty chain returns `valid=true` with `reason_code=EMPTY_CHAIN`. There is **no**
 
 `POST /auth/login` records `LOGIN` SUCCESS (same request transaction; fail-closed) or DENIED (`INVALID_CREDENTIALS` / `INACTIVE_ACCOUNT`) in an independent commit. Metadata may include `email_domain` only — never passwords or tokens. Inactive bearer access attempts may record `AUTH_INACTIVE_ACCESS`.
 
+## Security testing
+
+Automated authorization and IDOR regressions live in `backend/tests/security/` (owner / READ / EDIT / unrelated / ADMIN matrix, revocation, deactivation, mass-assignment, audit gates). Broader suites remain under `backend/tests/test_document_*.py`, `test_audit_trail.py`, and `test_admin_users.py`. Threat mitigations and residual risks: `THREATS.md`. How to reproduce an authorization-removal demo: `README.md`.
+
 ## Planned (not implemented)
 
 - Token revocation / logout that invalidates issued JWTs
+- Application-layer login rate limiting / account lockout
 - Automated retry worker for orphaned R2 objects after `STORAGE_DELETE_FAILED`
 - External audit-chain anchoring / WORM storage
 

@@ -189,6 +189,21 @@ This is my working log. I used Cursor to help write code, but I gave the rules, 
 
 ---
 
+## Task 16 — Security matrix, threat model, authz-removal demo (2026-10-21)
+
+**What I asked for:** Inspect routes/authz/tests/docs; add a dedicated security regression matrix; close documentation gaps in THREATS/PERMISSIONS/README; demonstrate that removing download authorization fails a real IDOR test; do not invent controls.
+
+**Actual AI assistance:** Cursor drafted `tests/security/` fixtures and matrix cases, expanded THREATS.md, and refreshed README test/demo instructions. I corrected invalid `@security.test` emails (Pydantic rejected reserved TLD), grant status **201**, and over-strict filename assertions (CR/LF neutralization is the real header-injection control).
+
+**Authz-removal demo (not committed):**
+1. `pytest tests/test_document_access.py::test_unauthorized_download_returns_no_bytes` → **passed** (404).
+2. Temporarily skipped `require_document_read` on download → same test **failed** (`200 == 404`).
+3. Restored secure code → test + `tests/security/` → **passed**.
+
+**How I checked:** `pytest tests/security/` (18 passed after fixes); authz demo as above; full suite run recorded in the completion report. Commit: see git log for Task 16 message.
+
+---
+
 ## Task 15 — Administrator dashboard UI (2026-10-21)
 
 **What I asked for:** Role-protected admin dashboard wired to real admin APIs — summary counts, audit log filters/pagination/verify, user activate/deactivate with confirmation, last-active-admin protection, no document content bypass.
@@ -261,5 +276,6 @@ This is my working log. I used Cursor to help write code, but I gave the rules, 
 | 13 | Owner/EDIT content edit | Server `your_access`; READ view-only; PUT content |
 | 14 | Durable audit + admin APIs | Hash chain; advisory lock; ADMIN list/verify |
 | 15 | Admin dashboard UI | Real summary/users/audit; last-admin lockout guard |
+| 16 | Security matrix + THREATS | IDOR demo fails when authz removed; docs honesty |
 
 I still review diffs, run tests myself, and refuse fake “all green” claims when a run actually failed.

@@ -11,14 +11,18 @@ Token role claims and client-supplied owner/permission fields are never treated 
 
 ## Permission matrix
 
-| Principal | List / discover | Read metadata / download | Edit permitted metadata | Grant / revoke | Soft-delete |
-| --- | --- | --- | --- | --- | --- |
-| Document owner | Yes | Yes | Yes | Yes | Yes |
-| Active READ grant | Yes (that doc) | Yes | No | No | No |
-| Active EDIT grant | Yes (that doc) | Yes | Yes (title/category/description only) | No | No |
-| No active grant | No | No | No | No | No |
-| ADMIN without grant | No | No | No | No | No |
-| Inactive account | No | No | No | No | No |
+| Principal | List / discover | Read metadata / download | Edit metadata | Edit DOCX content (`PUT …/content`) | Grant / revoke | Soft-delete | Admin APIs |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| Document owner | Yes | Yes | Yes | Yes | Yes | Yes | No (unless role ADMIN) |
+| Active READ grant | Yes (that doc) | Yes | No | No | No | No | No |
+| Active EDIT grant | Yes (that doc) | Yes | Yes (title/category/description) | Yes | No | No | No |
+| No active grant | No | No | No | No | No | No | No |
+| ADMIN without grant | No | No | No | No | No | No | Yes (users/audit only) |
+| Inactive account | No protected actions | | | | | | |
+
+Denial policy: inaccessible documents → **404**; insufficient action with a visible relationship → **403**; unauthenticated/inactive → **401**.
+
+Security regression matrix: `backend/tests/security/`.
 
 ### Owner vs EDIT grantee (metadata)
 

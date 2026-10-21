@@ -1,191 +1,222 @@
-# TrustVault — Threats I thought about while building
+# TrustVault — Threat model (implemented vs residual)
 
-This is written in plain English. It is about **real risks** we hit or designed for while building the app so far (through the 10 counted tasks: scaffold → frontend login). It is **not** a fake list of threats we never handled.
+This document describes **actual** mitigations in the current codebase and honest residual risks. Items marked *not implemented* are not claimed as controls.
 
-I also say which tests cover the threat. If something is still weak, I say that honestly.
-
----
-
-## What we are protecting
-
-- Private document files in Cloudflare R2
-- Metadata and who can access what (Postgres)
-- Passwords and login tokens
-- Audit history (durable hash chain in PostgreSQL; integrity verification for ADMIN)
+Tests cited below are real modules under `backend/tests/` (including `tests/security/`).
 
 ---
 
-## Threats we cared about (and what we did)
+## What we protect
 
-### 1. Someone guesses a document ID and reads or downloads it
-
-**Worry:** UUID in the URL is not a secret.
-
-**What we did:** Every metadata/download check goes through the server authorization code. No grant / not owner → generic **404**, not “you are forbidden but it exists.”
-
-**Tests:** Unauthorized download returns no file bytes; R2 is **not** called. Forged IDs fail. Covered in document access / authorization tests.
+- Private document bytes in Cloudflare R2
+- Document metadata and per-document grants in PostgreSQL
+- Password hashes and short-lived JWTs
+- Durable audit hash-chain events (ADMIN inspection)
 
 ---
 
-### 2. The browser sends a fake role or owner id
+## Threat catalog
 
-**Worry:** Client says `role=ADMIN` or `owner_id=me` and the API believes it.
+### 1. Insecure direct object reference (IDOR)
 
-**What we did:** Identity comes from the JWT `sub` + user row in Postgres. Ownership and grants come from the database. PATCH/share bodies reject extra fields like `owner_id`, `storage_key`, `granted_by`.
-
-**Tests:** Mass-assignment tests; sharing ignores client `granted_by`; authz tests ignore client-supplied owner/role fields.
-
----
-
-### 3. Access after someone was revoked
-
-**Worry:** Old JWT or cached “you may download” keeps working after revoke.
-
-**What we did:** Each protected request reloads grants (`revoked_at IS NULL`). No public or long-lived download links. Frontend menus are **not** the security control.
-
-**Tests:** Same token works before revoke, fails after, for download/metadata/edit. Sharing tests cover this on purpose.
-
----
-
-### 4. Files become public on the internet
-
-**Worry:** Presigned or public R2 URLs leak after share is removed.
-
-**What we did:** Private bucket only. Downloads stream through FastAPI after authz. Storage helpers do not create public/presigned download URLs.
-
-**Tests:** R2 unit tests assert those helpers are not present; download tests use mocked private get.
-
----
-
-### 5. Weak passwords / tokens leaking
-
-**Worry:** Plaintext passwords, tokens in logs, secrets in the frontend bundle.
-
-**What we did:** Argon2id hashes. Short-lived JWT. Frontend keeps the token in **memory** only (refresh = sign in again). Env examples are placeholders. Do not log passwords/tokens/file bytes.
-
-**Still open:** Server-side logout does **not** revoke JWTs yet. Token is valid until it expires if someone copied it.
-
-**Tests:** Auth tests for hash storage and failed-login logging safety; frontend tests that token is not written to localStorage/sessionStorage.
-
----
-
-### 6. Disabled user still acts
-
-**Worry:** Account turned off but old token still works.
-
-**What we did:** `get_current_user` and authz reject inactive users.
-
-**Tests:** Inactive user denied on `/users/me` and document routes.
-
----
-
-### 7. Search/list leaks other people’s titles
-
-**Worry:** Search for a secret title returns a hit even when you cannot open the file.
-
-**What we did:** List query only includes owned docs or active grants, **then** applies filters. Unauthorized search returns empty, not a teaser.
-
-**Tests:** Search-for-inaccessible-title returns zero rows.
-
----
-
-### 8. ADMIN sees every confidential file by role alone
-
-**Worry:** Admin role = automatic document access.
-
-**What we did:** ADMIN without a grant cannot list/read/download like an owner. Admin product features (user admin / audit UI) are separate and mostly not built yet.
-
-**Tests:** ADMIN without grant cannot download; empty list for unrelated docs.
-
----
-
-### 9. Bad or huge uploads
-
-**Worry:** Wrong file types, huge files, spoofed extensions.
-
-**What we did:** Size limit, allowed types, basic content checks. If DB save fails after R2 put, try to delete the R2 object.
-
-**Still open:** This is not a full malware scanner.
-
-**Tests:** Upload suite for empty/oversize/bad type/spoof; R2 cleanup on DB failure.
-
----
-
-### 10. Delete says “success” but file still downloadable — or opposite mess
-
-**Worry:** Postgres and R2 are two systems. One can succeed and the other fail.
-
-**What we did:** Soft-delete in Postgres **first** (file stops being listed/read/downloaded), then delete from R2. If R2 fails → keep soft-delete, return **503**, do not claim full success. Orphan private object may remain until cleanup later.
-
-**Tests:** R2 failure after delete keeps document unreadable; repeated delete returns 404; success path calls storage delete.
-
----
-
-### 11. EDIT user deletes or re-shares
-
-**Worry:** Someone with EDIT acts like the owner.
-
-**What we did:** EDIT can change title/category/description only. Grant/revoke/delete are owner-only.
-
-**Tests:** EDIT cannot grant, revoke, or delete; READ cannot edit.
-
----
-
-### 12. Frontend “security”
-
-**Worry:** Hiding a nav link feels like protection.
-
-**What we did:** Role-aware menus for UX only. Real checks stay on the API. Docs and UI text say this clearly.
-
-**Tests:** Frontend role nav tests; backend still denies wrong roles even if UI were changed.
-
----
-
-### 13. Audit trail tampering / missing deny records
-
-**Worry:** Attackers (or bugs) alter audit rows, or a rolled-back request erases a denial event.
-
-**What we did:**
-- Durable writer (`audit_trail.append_audit_event`) stores SHA-256 `event_hash` over a canonical JSON payload plus `previous_hash`.
-- Appends take `pg_advisory_xact_lock` and enforce strictly increasing `created_at` so concurrent writers cannot fork the tip.
-- SUCCESS for sensitive ops shares the request transaction (**fail-closed** if audit cannot be written).
-- DENIED commits in a **separate session** so request rollback does not erase the denial.
-- `GET /admin/audit/events` + `GET /admin/audit/integrity` are ADMIN-only. No app API edits/deletes history.
-- Metadata sanitization drops passwords, tokens, secrets, and raw bytes.
-
-**Tests:** `tests/test_audit_trail.py` — hash linkage, concurrent appends, field/hash/link tamper, reorder, empty chain, denial survival, non-admin 403, admin filters, login audit without secrets.
-
-**Honest limit (same-DB chain):**
-- Detectable: in-place field changes without re-hashing; broken `previous_hash` links; reordering that breaks link order; many mid-chain deletions that leave a gap.
-- **Not** reliably detectable without an external anchor: deleting the *newest* N events and leaving the remainder consistent; a privileged DBA rewriting the entire table into a new valid chain.
-- External anchoring / WORM storage is **future work**, not implemented. Do **not** call this cryptographically immutable.
-
----
-
-## Limits I still accept
-
-- Someone who already downloaded a file can keep their **local copy**. We only control later server access.
-- A DBA with full Postgres access can rewrite audit history into a new valid-looking chain; same-DB hashing only helps against partial/unskilled tampering.
-- Soft-delete + R2 delete can leave a private orphan object if cleanup fails.
-- JWT logout/revocation store is not built yet.
-- While a request transaction holds the advisory lock after a SUCCESS audit flush, an independent DENIED writer may wait briefly until that transaction commits (test fixtures that keep one transaction open across many calls must not interleave SUCCESS-held locks with independent DENIED commits carelessly).
-
----
-
-## Quick map: threat → tests (real ones)
-
-| Threat | Main tests |
+| | |
 | --- | --- |
-| IDOR read/download | `test_document_access.py`, `test_document_authorization.py` |
-| Fake owner/role fields | authz + mutation + sharing tests |
-| Revoke must stick | sharing + access “same token after revoke” tests |
-| No public R2 URLs | `test_r2_storage.py` |
-| Inactive users | auth + access tests |
-| List/search leak | access list/search tests |
-| ADMIN without grant | access + sharing tests |
-| Upload abuse / cleanup | `test_document_upload.py` |
-| Delete / R2 partial failure | `test_document_mutations.py` |
-| Audit hash chain / admin gate | `test_audit_trail.py` |
-| Token not in browser storage | frontend `auth-provider` Vitest |
+| **Impact** | Guess UUID → read/download another user’s document or metadata |
+| **Mitigation** | Every document route uses `document_authorization` against DB ownership/grants. Missing / no-access → generic **404** |
+| **Tests** | `tests/security/test_security_matrix.py` (unrelated user); `test_document_access.py::test_unauthorized_download_returns_no_bytes`, `test_forged_document_id_does_not_bypass`; `test_document_authorization.py` |
+| **Residual** | UUIDs are not secrets; rate limiting of probing is **not** implemented |
 
-If a threat above says “still open,” we did **not** pretend the tests fully close it.
+### 2. Unauthorized document downloads
+
+| | |
+| --- | --- |
+| **Impact** | Bytes leave the system without a current grant |
+| **Mitigation** | Download streams through FastAPI **after** `require_document_read`. Object key from PostgreSQL only. No public/presigned URLs |
+| **Tests** | Matrix + `test_document_access.py` (unauthorized / admin without grant / R2 not called); `test_r2_storage.py` (no public URL helpers) |
+| **Residual** | Local copies kept after a legitimate download cannot be revoked |
+
+### 3. Revoked permissions and disabled accounts
+
+| | |
+| --- | --- |
+| **Impact** | Old JWT or UI state continues to grant access |
+| **Mitigation** | Each request reloads grants (`revoked_at IS NULL`) and `users.is_active`. JWT is not a permission cache |
+| **Tests** | Matrix revoke READ/EDIT + deactivate; `test_document_sharing.py` / `test_document_access.py` same-token-after-revoke; `test_admin_users.py` deactivate blocks next `/users/me` |
+| **Residual** | No server-side token revocation list; stolen JWT works until expiry if account stays active |
+
+### 4. Role escalation and mass assignment
+
+| | |
+| --- | --- |
+| **Impact** | Client sets `role=ADMIN`, `owner_id`, `storage_key`, `granted_by` |
+| **Mitigation** | Actor from validated JWT `sub` + DB user. Schemas use `extra=forbid`. Upload ignores client owner/key |
+| **Tests** | Matrix role/owner body rejected; `test_document_upload.py::test_client_owner_id_and_storage_key_ignored`; mutation/sharing mass-assignment tests; `test_admin_users.py::test_role_not_mass_assignable` |
+| **Residual** | None claimed beyond schema coverage of each route |
+
+### 5. Public object storage or leaked download URLs
+
+| | |
+| --- | --- |
+| **Impact** | Anyone with a URL reads confidential files forever |
+| **Mitigation** | Private R2 bucket; API streaming only; storage service has no presign/public URL helpers |
+| **Tests** | `tests/security/test_security_gaps.py::test_r2_storage_service_has_no_public_or_presigned_url_helpers`; download path tests |
+| **Residual** | Misconfigured bucket ACL outside the app is an ops risk |
+
+### 6. Malicious and oversized uploads
+
+| | |
+| --- | --- |
+| **Impact** | Malware, zip bombs, DoS via huge bodies |
+| **Mitigation** | DOCX-only, size cap (10 MiB), ZIP/DOCX structure checks, reject empty/spoofed types. Not a malware scanner |
+| **Tests** | `test_document_upload.py` (empty/oversize/bad type/exe/spoof); security gaps filename strip |
+| **Residual** | No antivirus; crafted DOCX may still be harmful when opened locally |
+
+### 7. Path traversal and filename handling
+
+| | |
+| --- | --- |
+| **Impact** | `../` in upload names or Content-Disposition header injection |
+| **Mitigation** | Upload uses final path segment only; download filename strips CR/LF/quotes and sanitizes characters; DOCX zip members with `..` rejected |
+| **Tests** | `test_security_gaps.py` (normalize_extension, safe_download_filename); matrix path-traversal disposition; `file_validation` DOCX member checks |
+| **Residual** | Sanitized names may still contain previously injected tokens as underscores (no header break) |
+
+### 8. SQL injection / unsafe queries
+
+| | |
+| --- | --- |
+| **Impact** | Attacker runs arbitrary SQL via filters |
+| **Mitigation** | SQLAlchemy parameterized queries; no raw string-concatenated user SQL for document filters |
+| **Tests** | Filter/pagination validation tests; ORM usage throughout |
+| **Residual** | Future raw SQL must stay parameterized |
+
+### 9. Cross-site scripting (XSS)
+
+| | |
+| --- | --- |
+| **Impact** | Stored script in title/description executes in another user’s browser |
+| **Mitigation** | React text rendering (default escaping). Content-Disposition sanitization for downloads. In-browser DOCX preview uses mammoth HTML — treat as limited trust |
+| **Tests** | Filename header sanitization tests; no dedicated XSS browser suite |
+| **Residual** | Mammoth HTML preview is **not** a full HTML sanitizer product; admins/owners should treat preview as semi-trusted |
+
+### 10. CORS mistakes
+
+| | |
+| --- | --- |
+| **Impact** | Malicious origin reads API responses with victim cookies/tokens |
+| **Mitigation** | Explicit `CORS_ORIGINS` list (default localhost only). Credentials allowed only for listed origins. Not `*` |
+| **Tests** | `test_security_gaps.py::test_cors_does_not_allow_wildcard_by_default` |
+| **Residual** | Mis-set production `CORS_ORIGINS` could widen access |
+
+### 11. Brute-force login / rate limiting
+
+| | |
+| --- | --- |
+| **Impact** | Password guessing |
+| **Mitigation** | Generic login errors; Argon2id cost. **No** application-level rate limit or lockout |
+| **Tests** | Auth generic failure tests; login audit without password echo |
+| **Residual** | **Accepted gap** — rely on reverse-proxy / WAF rate limits in production |
+
+### 12. Token theft and session security
+
+| | |
+| --- | --- |
+| **Impact** | XSS or malware steals bearer token |
+| **Mitigation** | Frontend keeps access token in **memory only** (not localStorage/sessionStorage). Short TTL. HTTPS expected in production |
+| **Tests** | Frontend `auth-provider` Vitest |
+| **Residual** | No refresh-token rotation; no logout revocation store |
+
+### 13. Audit tampering and database compromise
+
+| | |
+| --- | --- |
+| **Impact** | Attacker hides tracks by editing `audit_events` |
+| **Mitigation** | SHA-256 hash chain + `pg_advisory_xact_lock`; ADMIN integrity verify. No app API to edit/delete history |
+| **Tests** | `test_audit_trail.py`; matrix non-admin audit 403 |
+| **Residual** | Same-DB chain is **not** tamper-proof against a DBA who rewrites the whole table or truncates the tail without an external anchor |
+
+### 14. Audit-write failures
+
+| | |
+| --- | --- |
+| **Impact** | Sensitive action succeeds without a record; or denial is lost on rollback |
+| **Mitigation** | SUCCESS for sensitive ops fail-closed when audit cannot write (same txn). DENIED uses separate commit (or try-lock for inactive access so 401 never blocks) |
+| **Tests** | Audit trail denial survival; mutation fail-closed hooks; inactive try-lock behavior |
+| **Residual** | Best-effort inactive-access audit may skip if lock busy |
+
+### 15. Concurrent audit writes
+
+| | |
+| --- | --- |
+| **Impact** | Broken previous_hash links under parallel writers |
+| **Mitigation** | Advisory transaction lock + monotonic timestamps |
+| **Tests** | `test_audit_trail.py::test_concurrent_appends_keep_valid_chain` |
+| **Residual** | Lock contention under extreme load |
+
+### 16. Partial failure between storage and database
+
+| | |
+| --- | --- |
+| **Impact** | Orphan R2 objects or DB rows pointing at missing objects |
+| **Mitigation** | Upload: cleanup R2 if DB fails after put. Delete: soft-delete first, then R2; R2 failure → 503 with tombstone kept |
+| **Tests** | `test_document_upload.py` cleanup; `test_document_mutations.py` R2 delete failure |
+| **Residual** | Orphan private objects until manual/ops cleanup (**no** automated sweeper yet) |
+
+### 17. Administrator abuse
+
+| | |
+| --- | --- |
+| **Impact** | ADMIN role used to read all files |
+| **Mitigation** | ADMIN gets user/audit APIs only. Document content still requires ownership or grant. Last-active-admin cannot be deactivated |
+| **Tests** | Matrix admin audit without content; `test_admin_users.py` |
+| **Residual** | Malicious ADMIN can still deactivate users / inspect audit metadata |
+
+### 18. Secret exposure (Git, logs, frontend)
+
+| | |
+| --- | --- |
+| **Impact** | JWT secret or R2 keys leak |
+| **Mitigation** | `.env` gitignored; example placeholders; no `NEXT_PUBLIC_` secrets for signing/R2; audit/logging policy excludes passwords/tokens/bytes |
+| **Tests** | Login failure does not echo password; audit sanitize metadata |
+| **Residual** | Developers may still paste secrets into tickets; dependency on correct deploy config |
+
+### 19. Dependency vulnerabilities, backups, retention, DoS
+
+| | |
+| --- | --- |
+| **Impact** | Supply-chain CVE; lost backups; resource exhaustion |
+| **Mitigation** | Pinned requirements/lockfiles in repo practice; upload size limits |
+| **Tests** | Size-limit upload tests only |
+| **Residual** | **Not implemented** as product features: automated CVE scanning gate, backup/retention policy UI, application-layer DoS protection beyond size limits |
+
+---
+
+## Authorization-check regression demonstration (performed)
+
+Evaluators may remove an authorization check. We verified detection as follows (local only; vulnerable code **not** committed):
+
+1. Baseline: `pytest tests/test_document_access.py::test_unauthorized_download_returns_no_bytes` → **passed** (404).
+2. Temporarily removed `require_document_read` from `GET /documents/{id}/download` (direct `session.get(Document)`).
+3. Re-ran the same test → **failed** (`assert 200 == 404`) — unauthorized caller received bytes.
+4. Restored `require_document_read` immediately.
+5. Re-ran the same test + `tests/security/` → **passed**.
+
+Command used:
+
+```powershell
+cd D:\TrustVault\backend
+.\.venv\Scripts\python.exe -m pytest tests/test_document_access.py::test_unauthorized_download_returns_no_bytes -q
+```
+
+---
+
+## Quick map
+
+| Threat | Primary tests |
+| --- | --- |
+| IDOR / unauthorized download | `tests/security/`, `test_document_access.py` |
+| Revoke / deactivate | matrix + sharing/access/admin tests |
+| Mass assignment | upload/mutations/sharing/admin |
+| Private R2 | `test_r2_storage.py`, security gaps |
+| Upload abuse | `test_document_upload.py` |
+| Audit chain | `test_audit_trail.py` |
+| Admin without content | matrix + `test_admin_users.py` |

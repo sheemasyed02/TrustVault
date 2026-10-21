@@ -2,11 +2,11 @@
 
 Secure document-sharing web application for confidential company documents. Server-side document access control and an auditable activity trail are required before features are considered complete.
 
-## Planned stack
+## Stack
 
 | Layer | Technology |
 | --- | --- |
-| Frontend | Next.js 16 (App Router), TypeScript, Tailwind CSS |
+| Frontend | Next.js (App Router), TypeScript, Tailwind CSS |
 | Backend | FastAPI, Python 3.12 |
 | Database | PostgreSQL, SQLAlchemy, Alembic |
 | Auth | Argon2id passwords (`pwdlib`), JWT access tokens (`PyJWT`) |
@@ -16,15 +16,16 @@ Secure document-sharing web application for confidential company documents. Serv
 
 Project rules: see [`AGENTS.md`](AGENTS.md).
 
-## Current status
+## Current capabilities
 
-- `frontend/` — landing/login shell only (not wired to real auth APIs yet).
-- `backend/` — `GET /health`, PostgreSQL schema, private R2 service, secure auth, document authorization service, and:
-  - `POST /auth/login`
-  - `GET /users/me`
-  - `GET /users/search` (active users by name/email for sharing)
-  - `POST /documents` (OWNER upload to private R2)
-- Document list/download/sharing/deletion APIs are not implemented yet.
+- Login / logout (memory-only access token on the frontend)
+- Role-aware navigation (ADMIN / OWNER / VIEWER) — **UI only**; API enforces authz
+- Document upload (DOCX), list, details, search/filter, metadata edit, soft-delete
+- Private R2 storage with opaque keys; downloads stream through the API
+- Per-document READ / EDIT grants with immediate revocation
+- In-app DOCX preview/edit for owner and EDIT grantees
+- Admin dashboard: user activate/deactivate, audit list/filters, hash-chain verify
+- Durable audit hash chain (not DBA-proof; see [`THREATS.md`](THREATS.md))
 
 ## Quick start
 
@@ -37,31 +38,26 @@ py -3.12 -m venv .venv
 pip install -r requirements.txt
 copy .env.example .env
 # Set DATABASE_URL and JWT_SECRET_KEY in backend/.env (never commit secrets)
+alembic upgrade head
 uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
 ```
 
-- Health: http://127.0.0.1:8000/health
-- Login: `POST http://127.0.0.1:8000/auth/login`
-- Current user: `GET http://127.0.0.1:8000/users/me` with `Authorization: Bearer <token>`
-
-### Database migrations
-
-No new migration was required for authentication (existing `users` table is reused).
+### Frontend
 
 ```powershell
-cd D:\TrustVault\backend
-.\.venv\Scripts\Activate.ps1
-alembic upgrade head
+cd D:\TrustVault\frontend
+copy .env.example .env.local
+# Set NEXT_PUBLIC_API_BASE_URL=http://127.0.0.1:8000
+npm install
+npm run dev
 ```
 
 ### Demo accounts (development only)
 
-Demo users are **not** created on app startup. Seed them explicitly:
-
 ```powershell
 cd D:\TrustVault\backend
 .\.venv\Scripts\Activate.ps1
-# Set DEMO_ADMIN_PASSWORD, DEMO_OWNER_PASSWORD, DEMO_VIEWER_PASSWORD in backend/.env
+# DEMO_ADMIN_PASSWORD, DEMO_OWNER_PASSWORD, DEMO_VIEWER_PASSWORD in backend/.env
 python -m app.cli.seed_demo_users
 ```
 
@@ -71,34 +67,69 @@ python -m app.cli.seed_demo_users
 | `sheema@trustvault.demo` | OWNER |
 | `user@trustvault.demo` | VIEWER |
 
-These are local/demo identities only. Do not use them as production accounts. Re-running the seed does not silently change an existing demo user's password or role.
+## Tests
 
-### Auth tests
+### Backend (full suite)
 
 ```powershell
 cd D:\TrustVault\backend
 .\.venv\Scripts\Activate.ps1
-pytest -v tests/test_auth.py tests/test_seed_demo_users.py
-# or full suite:
-pytest -v
+pytest -q
 ```
+
+### Security matrix (isolated regression cases)
+
+```powershell
+cd D:\TrustVault\backend
+.\.venv\Scripts\Activate.ps1
+pytest -q tests/security/
+```
+
+Documented cases cover owner / READ / EDIT / unrelated / ADMIN, revocation, deactivation, IDOR, and audit gates. See test docstrings in `tests/security/test_security_matrix.py`.
 
 ### Frontend
 
 ```powershell
 cd D:\TrustVault\frontend
-copy .env.example .env.local
-npm install
-npm run dev
+npm test -- --run
+npm run build
 ```
 
-App: http://localhost:3000
+### Alembic
+
+```powershell
+cd D:\TrustVault\backend
+.\.venv\Scripts\Activate.ps1
+alembic upgrade head
+alembic current
+```
+
+## Security regression demonstration (authorization removal)
+
+Interview evaluators may temporarily remove an authorization check. Reproduce detection locally (do **not** commit the vulnerable change):
+
+1. Run the baseline IDOR download test (must pass with **404**):
+
+```powershell
+cd D:\TrustVault\backend
+.\.venv\Scripts\Activate.ps1
+pytest tests/test_document_access.py::test_unauthorized_download_returns_no_bytes -q
+```
+
+2. In a disposable edit only, remove the `require_document_read(...)` call from `GET /documents/{document_id}/download` in `app/api/documents.py` and load the document without an access check.
+
+3. Re-run the same test — it must **fail** (unauthorized caller gets **200** and file bytes).
+
+4. Restore the original `require_document_read` block immediately.
+
+5. Re-run the same test and `pytest -q tests/security/` — both must pass.
+
+This demonstration was executed during Task 16; the vulnerable edit was never committed. Details: [`THREATS.md`](THREATS.md).
 
 ## Documentation
 
-- [`PROMPTS.md`](PROMPTS.md) — dated AI task log
-- [`THREATS.md`](THREATS.md) — threat model (planned vs implemented)
-- [`API_DOCUMENTATION.md`](API_DOCUMENTATION.md) — API surface
-- [`PERMISSIONS.md`](PERMISSIONS.md) — roles and grants
-
-Never commit `.env` files or real secrets. Use the `.env.example` placeholders only.
+- [`AGENTS.md`](AGENTS.md) — product and agent rules
+- [`PERMISSIONS.md`](PERMISSIONS.md) — role / resource / action matrix
+- [`API_DOCUMENTATION.md`](API_DOCUMENTATION.md) — real HTTP routes
+- [`THREATS.md`](THREATS.md) — threat model and residual risks
+- [`PROMPTS.md`](PROMPTS.md) — dated AI assistance log
