@@ -79,3 +79,48 @@ Actual result after ESLint config fix: lint exit code 0; `next build` succeeded 
 ### Outcome
 
 Scaffold complete. No authentication, document APIs, database tables, or R2 integration were added.
+
+---
+
+## 2026-10-21 — Task 4: PostgreSQL schema via Alembic
+
+### Prompt summary
+
+Create TrustVault PostgreSQL schema with SQLAlchemy models and Alembic migrations for `users`, `documents`, `document_permissions`, and `audit_events`. Connect with `DATABASE_URL` only. No auth/document APIs. Prefer local `trustvault_db`; Railway URL is for deployment reference.
+
+### Approach
+
+- Inspected backend: no existing models/migrations.
+- Confirmed `backend/.env` has local `DATABASE_URL` for `trustvault_db` and a Railway URL with hostname `postgres.railway.internal` (not reachable from the laptop).
+- Applied migrations to local PostgreSQL only.
+- Normalized `postgresql+asyncpg://` and `postgresql://` to sync `postgresql+psycopg://`.
+- Never logged database passwords.
+
+### Files created or updated
+
+- `backend/app/db/base.py`, `models.py`, `session.py`
+- `backend/app/core/database_url.py`, updated `config.py`
+- `backend/alembic.ini`, `alembic/env.py`, `alembic/versions/7afa3a6e7e04_create_trustvault_schema.py`
+- `backend/scripts/verify_schema.py`
+- `backend/tests/conftest.py`, `test_database_url.py`, `test_schema.py`
+- `backend/requirements.txt`, `.env.example`, `README.md`
+- Root `README.md`, `PROMPTS.md`
+
+### Verification
+
+```text
+alembic upgrade head
+python scripts\verify_schema.py
+pytest -v
+```
+
+Actual results:
+
+- Migration `7afa3a6e7e04` applied to local `trustvault_db`
+- Tables present: `users`, `documents`, `document_permissions`, `audit_events`, `alembic_version`
+- Partial unique index `uq_document_permissions_active_document_user` present
+- pytest: **15 passed**, 1 Starlette/httpx deprecation warning
+
+### Outcome
+
+Schema and migrations verified locally. No authentication, document APIs, seeds, or Railway remote migration from this machine.

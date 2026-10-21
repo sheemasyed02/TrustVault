@@ -2,8 +2,10 @@
 
 from functools import lru_cache
 
-from pydantic import Field
+from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+from app.core.database_url import normalize_database_url
 
 
 class Settings(BaseSettings):
@@ -22,6 +24,12 @@ class Settings(BaseSettings):
         default="http://localhost:3000",
         alias="CORS_ORIGINS",
     )
+    database_url: str = Field(alias="DATABASE_URL")
+
+    @field_validator("database_url")
+    @classmethod
+    def validate_database_url(cls, value: str) -> str:
+        return normalize_database_url(value)
 
     @property
     def cors_origin_list(self) -> list[str]:

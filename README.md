@@ -17,10 +17,9 @@ Project rules: see [`AGENTS.md`](AGENTS.md).
 
 ## Current status
 
-Scaffold only:
-
 - `frontend/` — Next.js app shell with a TrustVault landing/login entry page. No real authentication.
-- `backend/` — FastAPI app with configuration, CORS, centralized errors, and `GET /health`. No auth, documents, grants, or database tables yet.
+- `backend/` — FastAPI with `GET /health`, SQLAlchemy models, and Alembic migrations for `users`, `documents`, `document_permissions`, and `audit_events`.
+- Auth, document APIs, grants, and R2 are not implemented yet.
 
 ## Repository layout
 
@@ -56,10 +55,20 @@ npm run dev
 
 App: http://localhost:3000
 
+### Database migrations
+
+```powershell
+cd D:\TrustVault\backend
+.\.venv\Scripts\Activate.ps1
+# Ensure DATABASE_URL in backend/.env points at PostgreSQL (local: trustvault_db)
+alembic upgrade head
+python scripts\verify_schema.py
+```
+
 ### Backend tests
 
-```bash
-cd backend
+```powershell
+cd D:\TrustVault\backend
 .\.venv\Scripts\Activate.ps1
 pytest -v
 ```
