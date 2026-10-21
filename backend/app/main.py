@@ -1,12 +1,11 @@
-"""TrustVault FastAPI application entrypoint.
-
-Scaffold only: authentication, documents, grants, and storage are not implemented.
-"""
+"""TrustVault FastAPI application entrypoint."""
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from app.api.auth import router as auth_router
 from app.api.health import router as health_router
+from app.api.users import router as users_router
 from app.core.config import get_settings
 from app.core.errors import register_exception_handlers
 
@@ -17,7 +16,7 @@ def create_app() -> FastAPI:
         title=settings.app_name,
         description=(
             "Secure document sharing API. "
-            "Authorization and document features are not implemented in this scaffold."
+            "Document authorization endpoints are not implemented yet."
         ),
         version="0.1.0",
     )
@@ -32,6 +31,8 @@ def create_app() -> FastAPI:
 
     register_exception_handlers(app)
     app.include_router(health_router)
+    app.include_router(auth_router)
+    app.include_router(users_router)
 
     return app
 

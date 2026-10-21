@@ -50,3 +50,6 @@ temp/
 *.key
 secrets/
 credentials/
+
+# Generated SQL that embeds password hashes
+backend/scripts/railway_seed_demo_users.sql

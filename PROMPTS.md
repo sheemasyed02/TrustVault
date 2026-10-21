@@ -154,3 +154,44 @@ Actual result: **29 passed** .
 ### Outcome
 
 Private R2 storage service implemented with mocked tests only. Not tested against a real Cloudflare bucket. No document HTTP endpoints added.
+
+---
+
+## Task 4: Secure authentication and demo roles
+
+### Prompt summary
+
+Implement Argon2id password hashing, JWT access tokens, `POST /auth/login`, `GET /users/me`, `get_current_user`, idempotent demo seed command, tests, and documentation. No document authorization APIs.
+
+### Approach
+
+- Reused existing `users` table; no new Alembic migration required (`password_hash` VARCHAR(255) fits Argon2id hashes ~97 chars).
+- Libraries: `pwdlib[argon2]`, `PyJWT`, `email-validator`.
+- Generic login failures for unknown email, bad password, and inactive accounts.
+- Current role/active status always loaded from PostgreSQL, not from token claims.
+- Demo seed via explicit `python -m app.cli.seed_demo_users` only; passwords from env vars; no silent password/role reset.
+- Appended local `JWT_SECRET_KEY` into gitignored `backend/.env` without printing the secret.
+
+### Files created or updated
+
+- `backend/app/core/security/` — passwords + JWT
+- `backend/app/api/auth.py`, `users.py`, `deps.py`
+- `backend/app/services/auth_service.py`
+- `backend/app/schemas/auth.py`, `users.py`
+- `backend/app/cli/seed_demo_users.py`
+- `backend/tests/test_auth.py`, `test_seed_demo_users.py`
+- `backend/requirements.txt`, `.env.example`, `README.md`
+- Root `README.md`, `API_DOCUMENTATION.md`, `PROMPTS.md`
+
+### Problems found
+
+None that required corrective rework after the first full pytest run.
+
+### Verification
+
+```text
+cd backend
+pytest -v
+```
+
+Actual result: **47 passed**

@@ -1,6 +1,6 @@
 """TrustVault relational models.
 
-Authentication, document APIs, and audit writers are not implemented here.
+Document APIs and audit writers are not implemented here.
 """
 
 from __future__ import annotations

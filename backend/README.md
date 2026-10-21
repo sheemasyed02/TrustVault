@@ -4,9 +4,11 @@ FastAPI + Python. Current surface:
 
 - `GET /health`
 - SQLAlchemy models and Alembic migrations for PostgreSQL schema
-- Private Cloudflare R2 storage service (`app.storage`) — no document HTTP APIs yet
+- Private Cloudflare R2 storage service (`app.storage`)
+- Authentication: `POST /auth/login`, `GET /users/me`
+- Development seed: `python -m app.cli.seed_demo_users`
 
-Authentication, document upload/download endpoints, and grants are not implemented yet.
+Document upload/download endpoints and grant APIs are not implemented yet.
 
 ## Setup
 
@@ -18,13 +20,12 @@ pip install -r requirements.txt
 copy .env.example .env
 ```
 
-Set `DATABASE_URL` in `backend/.env` to your local PostgreSQL database (for example `trustvault_db`). Prefer:
+Required in `backend/.env`:
 
-```text
-postgresql+psycopg://USER:PASSWORD@localhost:5432/trustvault_db
-```
+- `DATABASE_URL`
+- `JWT_SECRET_KEY` (long random secret, ≥ 32 characters)
 
-`postgresql+asyncpg://...` is accepted and remapped to psycopg for sync SQLAlchemy/Alembic.
+Optional JWT settings: `JWT_ALGORITHM=HS256`, `JWT_ISSUER`, `JWT_AUDIENCE`, `ACCESS_TOKEN_EXPIRE_MINUTES`.
 
 ## Run API
 
@@ -34,59 +35,32 @@ uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
 
 ## Apply migrations
 
-Directory: `D:\TrustVault\backend`
-
 ```powershell
-.\.venv\Scripts\Activate.ps1
 alembic upgrade head
 ```
 
-Read-only verification:
+Authentication reuses the existing `users` table. No additional auth migration was required.
+
+## Seed demo users (dev only)
 
 ```powershell
-python scripts\verify_schema.py
+# DEMO_ADMIN_PASSWORD, DEMO_OWNER_PASSWORD, DEMO_VIEWER_PASSWORD must be set
+python -m app.cli.seed_demo_users
 ```
 
-Or in psql / pgAdmin:
-
-```sql
-SELECT table_name
-FROM information_schema.tables
-WHERE table_schema = 'public'
-  AND table_name IN ('users', 'documents', 'document_permissions', 'audit_events')
-ORDER BY table_name;
-```
+Never auto-seeded on startup. Passwords are never printed. Existing demo accounts are left unchanged on re-run; conflicting roles abort the seed.
 
 ## Tests
 
 ```powershell
 pytest -v
+pytest -v tests/test_auth.py tests/test_seed_demo_users.py
 ```
+
+## Token logout note
+
+Stateless JWT access tokens are not revoked by a logout call in this codebase. Tokens remain valid until expiry unless a revocation mechanism is added later.
 
 ## Railway
 
-On the Railway **backend** service, set `DATABASE_URL` from the Railway PostgreSQL plugin variable of the same name (or reference `${{Postgres.DATABASE_URL}}`).
-
-- From inside Railway, the private URL (`postgres.railway.internal`) is correct.
-- From your laptop, that private host **cannot** be resolved. Use the public URL instead.
-
-### Create tables on Railway from your laptop
-
-1. In Railway → your **Postgres** service → **Variables** (or Connect), copy `DATABASE_PUBLIC_URL`  
-   (host looks like `*.proxy.rlwy.net`, not `postgres.railway.internal`).
-2. Put that value into `backend/.env` as:
-
-```text
-RAILWAY_DATABASE_URL=postgresql://...proxy.rlwy.net:.../railway
-```
-
-3. Run:
-
-```powershell
-cd D:\TrustVault\backend
-.\.venv\Scripts\Activate.ps1
-python scripts\migrate_with_url_env.py RAILWAY_DATABASE_URL
-python scripts\verify_schema.py
-```
-
-For step 3 verification against Railway, temporarily point `DATABASE_URL` at the same public URL, or re-run verify after setting it. Do not commit `.env` or paste passwords into chat.
+On the Railway **backend** service, set `DATABASE_URL` and `JWT_SECRET_KEY` (and related JWT vars). Do not commit secrets.

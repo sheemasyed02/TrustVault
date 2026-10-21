@@ -2,7 +2,7 @@
 
 from functools import lru_cache
 
-from pydantic import Field, field_validator
+from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from app.core.database_url import normalize_database_url
@@ -27,6 +27,18 @@ class Settings(BaseSettings):
     )
     database_url: str = Field(alias="DATABASE_URL")
 
+    # JWT — required before issuing or validating access tokens.
+    jwt_secret_key: str | None = Field(default=None, alias="JWT_SECRET_KEY")
+    # Legacy alias accepted for older local .env files; prefer JWT_SECRET_KEY.
+    jwt_secret: str | None = Field(default=None, alias="JWT_SECRET")
+    jwt_algorithm: str = Field(default="HS256", alias="JWT_ALGORITHM")
+    jwt_issuer: str = Field(default="trustvault", alias="JWT_ISSUER")
+    jwt_audience: str = Field(default="trustvault-api", alias="JWT_AUDIENCE")
+    access_token_expire_minutes: int = Field(
+        default=30,
+        alias="ACCESS_TOKEN_EXPIRE_MINUTES",
+    )
+
     # Cloudflare R2 — optional until a storage operation is attempted.
     r2_account_id: str | None = Field(default=None, alias="R2_ACCOUNT_ID")
     r2_access_key_id: str | None = Field(default=None, alias="R2_ACCESS_KEY_ID")
@@ -39,10 +51,27 @@ class Settings(BaseSettings):
     def validate_database_url(cls, value: str) -> str:
         return normalize_database_url(value)
 
+    @model_validator(mode="after")
+    def validate_jwt_algorithm(self) -> "Settings":
+        if self.jwt_algorithm != "HS256":
+            raise ValueError("JWT_ALGORITHM must be HS256")
+        return self
+
     @property
     def cors_origin_list(self) -> list[str]:
         origins = [origin.strip() for origin in self.cors_origins.split(",")]
         return [origin for origin in origins if origin]
+
+    @property
+    def resolved_jwt_secret(self) -> str:
+        secret = (self.jwt_secret_key or self.jwt_secret or "").strip()
+        if not secret or secret == "CHANGE_ME_TO_A_LONG_RANDOM_VALUE":
+            raise ValueError(
+                "JWT_SECRET_KEY is required and must be a long random secret"
+            )
+        if len(secret) < 32:
+            raise ValueError("JWT_SECRET_KEY must be at least 32 characters")
+        return secret
 
 
 @lru_cache
