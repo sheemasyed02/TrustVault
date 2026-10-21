@@ -45,9 +45,19 @@ def get_session_factory() -> sessionmaker[Session]:
 
 
 def get_db() -> Generator[Session, None, None]:
+    """Yield a request-scoped session.
+
+    Successful handlers must persist work: without an explicit commit, SQLAlchemy
+    rolls back the transaction when the session closes, so flushed inserts
+    (uploads, grants, metadata edits) would disappear after a 2xx response.
+    """
     session = get_session_factory()()
     try:
         yield session
+        session.commit()
+    except Exception:
+        session.rollback()
+        raise
     finally:
         session.close()
 

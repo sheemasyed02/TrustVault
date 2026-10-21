@@ -69,14 +69,25 @@ Every protected check reloads grant state from PostgreSQL. JWTs are not permissi
 
 Document (and non-owner grant) rows are locked with `FOR UPDATE`, then edit authorization is re-checked. A revoke committed before that check denies the edit. Under READ COMMITTED, a residual race between the final check and commit is **not** claimed as fully eliminated; tests cover revoke-then-edit on the same token.
 
+## User search for sharing
+
+- Route: `GET /users/search?q=…`
+- Service: `app.services.user_search.search_users`
+- Any **authenticated active** user may search. Results are limited to other **active** users matched by name/email.
+- Search returns `id` / `name` / `email` only. It does **not** grant document access.
+- Sharing still requires document ownership via `POST/DELETE /documents/{id}/permissions`.
+- Empty / tiny queries are rejected to reduce unlimited directory enumeration.
+
 ## Code entry points
 
 - `app.services.document_authorization.*`
 - `app.services.document_metadata.update_document_metadata`
 - `app.services.document_deletion.soft_delete_document`
 - `app.services.document_sharing.*`
+- `app.services.user_search.search_users`
 - `app.api.documents` (upload/list/get/patch/delete/download)
 - `app.api.document_permissions` (list/grant/revoke)
+- `app.api.users` (`/me`, `/search`)
 
 ## Audit
 
@@ -88,6 +99,7 @@ Non-durable hooks (`persisted=false`) for upload, list, metadata read/update, do
 - `tests/test_document_access.py`
 - `tests/test_document_sharing.py`
 - `tests/test_document_mutations.py` — PATCH/DELETE, R2 failure honesty, revoke-then-edit
+- `tests/test_user_search.py` — auth, matching, inactive/self exclusion, pagination, sensitive fields
 
 ## Remaining gaps
 

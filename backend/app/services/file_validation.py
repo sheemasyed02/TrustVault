@@ -1,6 +1,11 @@
 """Upload file validation for TrustVault.
 
-Allowed types use magic-byte / structure checks in addition to extension.
+TrustVault is a confidential *document* sharing system. Only Microsoft Word
+DOCX uploads are accepted so owners and EDIT grantees work with editable
+office documents (view/edit locally after authorized download; metadata edits
+in-app). PDF/PNG/JPEG are rejected at upload.
+
+Allowed types use structure checks in addition to extension.
 This is not malware scanning and does not prove a file is safe to open.
 """
 
@@ -8,25 +13,21 @@ from __future__ import annotations
 
 import zipfile
 from dataclasses import dataclass
+from io import BytesIO
 from pathlib import Path
 
 MAX_UPLOAD_BYTES = 10 * 1024 * 1024  # 10 MiB
 
-ALLOWED_EXTENSIONS = frozenset({".pdf", ".docx", ".png", ".jpg", ".jpeg"})
+ALLOWED_EXTENSIONS = frozenset({".docx"})
+
+DOCX_MEDIA_TYPE = (
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+)
 
 MEDIA_BY_EXTENSION = {
-    ".pdf": "application/pdf",
-    ".docx": (
-        "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-    ),
-    ".png": "image/png",
-    ".jpg": "image/jpeg",
-    ".jpeg": "image/jpeg",
+    ".docx": DOCX_MEDIA_TYPE,
 }
 
-PNG_SIGNATURE = b"\x89PNG\r\n\x1a\n"
-JPEG_SIGNATURE = b"\xff\xd8\xff"
-PDF_SIGNATURE = b"%PDF-"
 ZIP_SIGNATURE = b"PK\x03\x04"
 
 
@@ -50,7 +51,7 @@ class ValidatedUpload:
 def normalize_extension(filename: str | None) -> str:
     if not filename or not filename.strip():
         raise FileValidationError(
-            "Filename with a supported extension is required",
+            "Filename with a .docx extension is required",
             reason_code="MISSING_FILENAME",
         )
     # Use only the final suffix; ignore client path segments.
@@ -58,31 +59,17 @@ def normalize_extension(filename: str | None) -> str:
     ext = Path(name).suffix.lower()
     if ext not in ALLOWED_EXTENSIONS:
         raise FileValidationError(
-            "Unsupported file type",
+            "Only DOCX documents are supported",
             status_code=415,
             reason_code="UNSUPPORTED_EXTENSION",
         )
     return ext
 
 
-def _is_pdf(data: bytes) -> bool:
-    return data.startswith(PDF_SIGNATURE)
-
-
-def _is_png(data: bytes) -> bool:
-    return data.startswith(PNG_SIGNATURE)
-
-
-def _is_jpeg(data: bytes) -> bool:
-    return data.startswith(JPEG_SIGNATURE)
-
-
 def _is_docx(data: bytes) -> bool:
     if not data.startswith(ZIP_SIGNATURE):
         return False
     try:
-        from io import BytesIO
-
         with zipfile.ZipFile(BytesIO(data)) as archive:
             names = set(archive.namelist())
             # Reject path traversal style members.
@@ -104,30 +91,6 @@ def _is_docx(data: bytes) -> bool:
 
 
 def detect_media_type(data: bytes, extension: str) -> str:
-    if extension == ".pdf":
-        if not _is_pdf(data):
-            raise FileValidationError(
-                "File content is not a valid PDF",
-                status_code=415,
-                reason_code="INVALID_PDF_CONTENT",
-            )
-        return MEDIA_BY_EXTENSION[".pdf"]
-    if extension == ".png":
-        if not _is_png(data):
-            raise FileValidationError(
-                "File content is not a valid PNG",
-                status_code=415,
-                reason_code="INVALID_PNG_CONTENT",
-            )
-        return MEDIA_BY_EXTENSION[".png"]
-    if extension in {".jpg", ".jpeg"}:
-        if not _is_jpeg(data):
-            raise FileValidationError(
-                "File content is not a valid JPEG",
-                status_code=415,
-                reason_code="INVALID_JPEG_CONTENT",
-            )
-        return MEDIA_BY_EXTENSION[".jpg"]
     if extension == ".docx":
         if not _is_docx(data):
             raise FileValidationError(
@@ -137,7 +100,7 @@ def detect_media_type(data: bytes, extension: str) -> str:
             )
         return MEDIA_BY_EXTENSION[".docx"]
     raise FileValidationError(
-        "Unsupported file type",
+        "Only DOCX documents are supported",
         status_code=415,
         reason_code="UNSUPPORTED_EXTENSION",
     )
@@ -153,17 +116,7 @@ def validate_client_content_type(
     provided = client_content_type.split(";")[0].strip().lower()
     if not provided or provided == "application/octet-stream":
         return
-    expected = expected_media_type.lower()
-    jpeg_aliases = {"image/jpeg", "image/jpg"}
-    if expected == "image/jpeg":
-        if provided not in jpeg_aliases:
-            raise FileValidationError(
-                "Declared content type does not match file contents",
-                status_code=415,
-                reason_code="CONTENT_TYPE_MISMATCH",
-            )
-        return
-    if provided != expected:
+    if provided != expected_media_type.lower():
         raise FileValidationError(
             "Declared content type does not match file contents",
             status_code=415,

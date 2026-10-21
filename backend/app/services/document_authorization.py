@@ -371,6 +371,15 @@ def evaluate_document_access(
     return context
 
 
+def caller_access_level(context: DocumentAccessContext) -> str:
+    """Return OWNER, EDIT, or READ for API/UI capability hints."""
+    if context.is_owner:
+        return "OWNER"
+    if context.grant_permission == "EDIT":
+        return "EDIT"
+    return "READ"
+
+
 def require_document_read(
     session: Session,
     *,
@@ -388,6 +397,23 @@ def require_document_read(
     ).document
 
 
+def require_document_read_context(
+    session: Session,
+    *,
+    user: User,
+    document_id: uuid.UUID,
+    audit: AuthorizationAuditHook | None = None,
+) -> DocumentAccessContext:
+    """Like require_document_read, but keep ownership/grant details for the response."""
+    return evaluate_document_access(
+        session,
+        user=user,
+        document_id=document_id,
+        action=DocumentAction.READ,
+        audit=audit,
+    )
+
+
 def require_document_edit(
     session: Session,
     *,
@@ -403,6 +429,23 @@ def require_document_edit(
         action=DocumentAction.EDIT_METADATA,
         audit=audit,
     ).document
+
+
+def require_document_edit_context(
+    session: Session,
+    *,
+    user: User,
+    document_id: uuid.UUID,
+    audit: AuthorizationAuditHook | None = None,
+) -> DocumentAccessContext:
+    """Like require_document_edit, but keep ownership/grant details for the response."""
+    return evaluate_document_access(
+        session,
+        user=user,
+        document_id=document_id,
+        action=DocumentAction.EDIT_METADATA,
+        audit=audit,
+    )
 
 
 def require_document_owner(

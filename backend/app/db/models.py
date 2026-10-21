@@ -102,6 +102,8 @@ class Document(Base):
     category: Mapped[str] = mapped_column(String(128), nullable=False)
     description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     storage_key: Mapped[str] = mapped_column(String(512), nullable=False, unique=True)
+    # Sanitized client filename for Content-Disposition; not used as the R2 key.
+    original_filename: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     mime_type: Mapped[str] = mapped_column(String(255), nullable=False)
     file_size: Mapped[int] = mapped_column(BigInteger, nullable=False)
     sha256_checksum: Mapped[str] = mapped_column(String(64), nullable=False)

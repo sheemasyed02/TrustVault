@@ -174,9 +174,9 @@ def test_unauthenticated_upload_rejected(client: TestClient):
     response = _upload(
         client,
         token=None,
-        content=_minimal_pdf(),
-        filename="a.pdf",
-        content_type="application/pdf",
+        content=_minimal_docx(),
+        filename="a.docx",
+        content_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
     )
     assert response.status_code == 401
 
@@ -189,33 +189,37 @@ def test_owner_upload_permitted(
     audit_hook: RecordingUploadAuditHook,
 ):
     owner = _create_user(db_session, role="OWNER")
-    content = _minimal_pdf()
+    content = _minimal_docx()
     response = _upload(
         client,
         token=_token(owner, auth_settings),
         content=content,
-        filename="report.pdf",
-        content_type="application/pdf",
+        filename="report.docx",
+        content_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
     )
     assert response.status_code == 201
     body = response.json()
     assert body["title"] == "Q3 Report"
     assert body["category"] == "Finance"
     assert body["owner"]["id"] == str(owner.id)
-    assert body["mime_type"] == "application/pdf"
+    assert body["mime_type"] == "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
     assert body["file_size"] == len(content)
     assert body["sha256_checksum"] == sha256_hex_bytes(content)
+    assert body["original_filename"] == "report.docx"
     assert "storage_key" not in body
     assert "password" not in body
     storage_mock.upload_bytes.assert_called_once()
+    storage_mock.delete_object.assert_not_called()
     args, kwargs = storage_mock.upload_bytes.call_args
     assert args[0].startswith("objects/")
     assert args[1] == content
-    assert kwargs["content_type"] == "application/pdf"
+    assert kwargs["content_type"] == "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
     doc = db_session.scalar(select(Document).where(Document.id == body["id"]))
     assert doc is not None
     assert doc.owner_id == owner.id
     assert doc.storage_key.startswith("objects/")
+    assert doc.original_filename == "report.docx"
+    assert doc.deleted_at is None
     assert any(e["outcome"] == "SUCCESS" for e in audit_hook.events)
 
 
@@ -231,13 +235,15 @@ def test_non_owner_roles_rejected(
     response = _upload(
         client,
         token=_token(user, auth_settings),
-        content=_minimal_pdf(),
-        filename="a.pdf",
-        content_type="application/pdf",
+        content=_minimal_docx(),
+        filename="a.docx",
+        content_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
     )
     assert response.status_code == 403
     storage_mock.upload_bytes.assert_not_called()
-    assert db_session.scalar(select(Document)) is None
+    assert (
+        db_session.scalar(select(Document).where(Document.owner_id == user.id)) is None
+    )
 
 
 def test_inactive_user_rejected(
@@ -250,9 +256,9 @@ def test_inactive_user_rejected(
     response = _upload(
         client,
         token=_token(user, auth_settings),
-        content=_minimal_pdf(),
-        filename="a.pdf",
-        content_type="application/pdf",
+        content=_minimal_docx(),
+        filename="a.docx",
+        content_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
     )
     assert response.status_code == 401
     storage_mock.upload_bytes.assert_not_called()
@@ -269,36 +275,52 @@ def test_client_owner_id_and_storage_key_ignored(
     response = _upload(
         client,
         token=_token(owner, auth_settings),
-        content=_minimal_pdf(),
-        filename="a.pdf",
-        content_type="application/pdf",
+        content=_minimal_docx(),
+        filename="a.docx",
+        content_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
         extra_data={
             "owner_id": str(other.id),
-            "storage_key": "client/controlled/path.pdf",
+            "storage_key": "client/controlled/path.docx",
         },
     )
     assert response.status_code == 201
     doc = db_session.scalar(select(Document).where(Document.id == response.json()["id"]))
     assert doc is not None
     assert doc.owner_id == owner.id
-    assert doc.storage_key != "client/controlled/path.pdf"
+    assert doc.storage_key != "client/controlled/path.docx"
     assert doc.storage_key.startswith("objects/")
+
+
+def test_valid_docx_accepted(
+    client: TestClient,
+    db_session: Session,
+    auth_settings: Settings,
+):
+    owner = _create_user(db_session, role="OWNER")
+    response = _upload(
+        client,
+        token=_token(owner, auth_settings),
+        content=_minimal_docx(),
+        filename="a.docx",
+        content_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    )
+    assert response.status_code == 201
 
 
 @pytest.mark.parametrize(
     ("builder", "filename", "content_type"),
     [
         (_minimal_pdf, "a.pdf", "application/pdf"),
-        (_minimal_docx, "a.docx", "application/vnd.openxmlformats-officedocument.wordprocessingml.document"),
         (_minimal_png, "a.png", "image/png"),
         (_minimal_jpeg, "a.jpg", "image/jpeg"),
         (_minimal_jpeg, "a.jpeg", "image/jpeg"),
     ],
 )
-def test_valid_formats_accepted(
+def test_non_docx_formats_rejected(
     client: TestClient,
     db_session: Session,
     auth_settings: Settings,
+    storage_mock: MagicMock,
     builder,
     filename: str,
     content_type: str,
@@ -311,7 +333,8 @@ def test_valid_formats_accepted(
         filename=filename,
         content_type=content_type,
     )
-    assert response.status_code == 201
+    assert response.status_code == 415
+    storage_mock.upload_bytes.assert_not_called()
 
 
 def test_empty_file_rejected(
@@ -325,8 +348,8 @@ def test_empty_file_rejected(
         client,
         token=_token(owner, auth_settings),
         content=b"",
-        filename="a.pdf",
-        content_type="application/pdf",
+        filename="a.docx",
+        content_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
     )
     assert response.status_code == 400
     storage_mock.upload_bytes.assert_not_called()
@@ -339,13 +362,13 @@ def test_oversized_file_rejected(
     storage_mock: MagicMock,
 ):
     owner = _create_user(db_session, role="OWNER")
-    content = b"%PDF-" + (b"x" * (MAX_UPLOAD_BYTES + 10))
+    content = _minimal_docx() + (b"x" * (MAX_UPLOAD_BYTES + 10))
     response = _upload(
         client,
         token=_token(owner, auth_settings),
         content=content,
-        filename="big.pdf",
-        content_type="application/pdf",
+        filename="big.docx",
+        content_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
     )
     assert response.status_code == 413
     storage_mock.upload_bytes.assert_not_called()
@@ -379,8 +402,8 @@ def test_mime_mismatch_rejected(
     response = _upload(
         client,
         token=_token(owner, auth_settings),
-        content=_minimal_pdf(),
-        filename="a.pdf",
+        content=_minimal_docx(),
+        filename="a.docx",
         content_type="image/png",
     )
     assert response.status_code == 415
@@ -393,12 +416,13 @@ def test_spoofed_extension_rejected(
     auth_settings: Settings,
     storage_mock: MagicMock,
 ):
+    """Non-DOCX extensions are rejected even with plausible content bytes."""
     owner = _create_user(db_session, role="OWNER")
     response = _upload(
         client,
         token=_token(owner, auth_settings),
         content=_minimal_png(),
-        filename="not-a-pdf.pdf",
+        filename="not-a-docx.pdf",
         content_type="application/pdf",
     )
     assert response.status_code == 415
@@ -433,9 +457,9 @@ def test_unsafe_filename_does_not_become_storage_key(
     response = _upload(
         client,
         token=_token(owner, auth_settings),
-        content=_minimal_pdf(),
-        filename="../../etc/passwd.pdf",
-        content_type="application/pdf",
+        content=_minimal_docx(),
+        filename="../../etc/passwd.docx",
+        content_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
     )
     assert response.status_code == 201
     key = storage_mock.upload_bytes.call_args.args[0]
@@ -454,9 +478,9 @@ def test_invalid_metadata_rejected(
     response = _upload(
         client,
         token=_token(owner, auth_settings),
-        content=_minimal_pdf(),
-        filename="a.pdf",
-        content_type="application/pdf",
+        content=_minimal_docx(),
+        filename="a.docx",
+        content_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
         title="   ",
         category="Finance",
     )
@@ -474,12 +498,14 @@ def test_validation_failure_leaves_no_r2_or_db_record(
     _upload(
         client,
         token=_token(owner, auth_settings),
-        content=b"not-pdf",
-        filename="a.pdf",
-        content_type="application/pdf",
+        content=b"not-a-docx",
+        filename="a.docx",
+        content_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
     )
     storage_mock.upload_bytes.assert_not_called()
-    assert db_session.scalar(select(Document)) is None
+    assert (
+        db_session.scalar(select(Document).where(Document.owner_id == owner.id)) is None
+    )
 
 
 def test_r2_failure_does_not_create_document(
@@ -493,12 +519,14 @@ def test_r2_failure_does_not_create_document(
     response = _upload(
         client,
         token=_token(owner, auth_settings),
-        content=_minimal_pdf(),
-        filename="a.pdf",
-        content_type="application/pdf",
+        content=_minimal_docx(),
+        filename="a.docx",
+        content_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
     )
     assert response.status_code == 500
-    assert db_session.scalar(select(Document)) is None
+    assert (
+        db_session.scalar(select(Document).where(Document.owner_id == owner.id)) is None
+    )
 
 
 def test_db_failure_after_r2_triggers_cleanup(
@@ -515,9 +543,9 @@ def test_db_failure_after_r2_triggers_cleanup(
         upload_document(
             broken,
             owner=owner,
-            file_bytes=_minimal_pdf(),
-            filename="a.pdf",
-            client_content_type="application/pdf",
+            file_bytes=_minimal_docx(),
+            filename="a.docx",
+            client_content_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
             title="Title",
             category="Cat",
             description=None,
@@ -547,9 +575,9 @@ def test_cleanup_failure_still_not_success(
         upload_document(
             broken,
             owner=owner,
-            file_bytes=_minimal_pdf(),
-            filename="a.pdf",
-            client_content_type="application/pdf",
+            file_bytes=_minimal_docx(),
+            filename="a.docx",
+            client_content_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
             title="Title",
             category="Cat",
             description=None,
@@ -572,9 +600,9 @@ def test_success_response_is_safe(
     response = _upload(
         client,
         token=_token(owner, auth_settings),
-        content=_minimal_pdf(),
-        filename="a.pdf",
-        content_type="application/pdf",
+        content=_minimal_docx(),
+        filename="a.docx",
+        content_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
     )
     body = response.json()
     for forbidden in ("storage_key", "password_hash", "R2_", "access_key", "secret"):
@@ -588,14 +616,14 @@ def test_logs_do_not_include_credentials_or_bytes(
     caplog: pytest.LogCaptureFixture,
 ):
     owner = _create_user(db_session, role="OWNER")
-    content = _minimal_pdf()
+    content = _minimal_docx()
     with caplog.at_level(logging.INFO):
         _upload(
             client,
             token=_token(owner, auth_settings),
             content=content,
-            filename="a.pdf",
-            content_type="application/pdf",
+            filename="a.docx",
+            content_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
         )
     combined = " | ".join(record.getMessage() for record in caplog.records)
     assert "super-secret" not in combined
@@ -612,9 +640,9 @@ def test_authorization_denial_is_audited(
     _upload(
         client,
         token=_token(viewer, auth_settings),
-        content=_minimal_pdf(),
-        filename="a.pdf",
-        content_type="application/pdf",
+        content=_minimal_docx(),
+        filename="a.docx",
+        content_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
     )
     assert any(
         e["outcome"] == "DENIED" and e["reason_code"] == "ROLE_NOT_OWNER"

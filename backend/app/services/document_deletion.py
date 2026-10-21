@@ -84,6 +84,12 @@ def soft_delete_document(
             "R2 delete failed after soft-delete; object may remain private orphan",
             extra={"delete_stage": "r2_delete_failed"},
         )
+        # Persist the tombstone before the request fails — get_db rolls back on
+        # exceptions, which would otherwise revive a document that must stay gone.
+        try:
+            session.commit()
+        except SQLAlchemyError:
+            logger.error("Failed to commit soft-delete after storage cleanup failure")
         raise DocumentDeletionError(
             "Document removed from catalog but storage cleanup failed",
             status_code=503,

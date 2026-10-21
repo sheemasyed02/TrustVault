@@ -2,10 +2,6 @@
 
 This is my working log. I used Cursor to help write code, but I gave the rules, checked the output, and fixed things when the tool was wrong.
 
-**Counting note:** Early setup (reading `AGENTS.md` / `.gitignore` only) is **not** part of the counted tasks. Counted tasks below run scaffold → frontend login → document dashboard. (Course labels sometimes say “Task 13” for the dashboard; here it is counted task 11.)
-
-I did **not** invent bugs, fake test results, or fake “AI mistakes.” Only real things that happened.
-
 ---
 
 ## Task 1 — Scaffold (frontend + backend shell)
@@ -154,7 +150,56 @@ I did **not** invent bugs, fake test results, or fake “AI mistakes.” Only re
 - `npm run lint` — **0 errors** (1 existing custom-font warning in root layout)
 - `npm run build` — **succeeded** (Next.js 16.4.2)
 
-No commit yet for this task (not requested).
+---
+
+## Task 12 — Document upload / details / edit / download / sharing UI (2026-10-21)
+
+**What I asked for:** Wire the real document lifecycle to FastAPI — upload, details, download, metadata PATCH, grant/revoke, owner delete. No admin/audit UI. No fake users or fake success.
+
+**Actual APIs used:**
+- `POST /documents` (multipart: file, title, category, description)
+- `GET /documents/{id}`, `PATCH /documents/{id}`, `DELETE /documents/{id}`, `GET …/download`
+- `GET/POST /documents/{id}/permissions`, `DELETE …/permissions/{user_id}`
+
+**Gaps I did not invent around:**
+- No user search/list endpoint — grant UI takes a registered **user UUID** and states the missing API.
+- Detail response has no effective READ/EDIT field — non-owners may attempt metadata edit; server 403 hides the form afterward. READ vs EDIT badges only appear on the owner’s grant list.
+
+**What went wrong / fixed:**
+1. Lifecycle UI test used an invalid UUID variant nibble, so client validation blocked the grant (looked like a grant bug). Fixed the fixture UUID.
+2. React Compiler lint flagged sync `setState` from the permissions `useEffect` — moved loading state into the async path.
+
+**How I checked (frontend):**
+- `npm test` — **42 passed** (11 files)
+- `npm run lint` — **0 errors** (1 existing font warning)
+- `npm run build` — **succeeded**
+
+---
+
+## Task 13 — Owner/EDIT in-app edit; READ view-only (2026-10-21)
+
+**What I asked for:** On the document view page, owners can edit. Viewers with READ only read; viewers with EDIT can edit content/metadata like the owner (still no share/delete).
+
+**What was built:**
+- Detail API returns `your_access` (`OWNER` | `EDIT` | `READ`) from PostgreSQL.
+- `PUT /documents/{id}/content` rebuilds DOCX for owner/EDIT; READ gets 403.
+- Detail UI gates preview editor + metadata form on `your_access`; sharing/delete remain owner-only.
+
+**How I checked:** backend content-edit tests + frontend access/API tests (see task completion report).
+
+---
+
+## Bugfix — upload vanished + R2 env loading (2026-10-21)
+
+**Symptoms:** Owner upload looked successful then the document disappeared; R2 seemed broken depending on how the API was started.
+
+**Root causes (verified in code):**
+1. `get_db()` in `backend/app/db/session.py` flushed inserts but never committed. Closing the session rolled the transaction back after HTTP 201 — no DELETE was involved.
+2. `Settings` used cwd-relative `env_file=".env"`. Starting uvicorn outside `backend/` skipped `backend/.env`, so configured R2 variables were not loaded.
+
+**Fixes:** commit on successful requests; load `backend/.env` via an absolute path; commit soft-delete tombstones before certain 503 paths; regression tests for commit/rollback and cwd-independent settings. Live R2 put/get/delete smoke succeeded with existing backend credentials (values not logged).
+
+**Checks:** backend pytest **176 passed**; frontend **43 passed**, lint (font warning only), build OK. 
 
 ---
 
@@ -173,5 +218,7 @@ No commit yet for this task (not requested).
 | 9 | Edit/delete | Soft-delete-first; NullPool after connection exhaustion |
 | 10 | Frontend login | Memory-only token; Vitest cleanup; honest logout limits |
 | 11 | Document dashboard | Real list API only; Shared With Me without inventing an endpoint; fixed build/lint |
+| 12 | Document lifecycle UI | Multipart upload; UUID grant (no user search); confirm delete/revoke |
+| 13 | Owner/EDIT content edit | Server `your_access`; READ view-only; PUT content |
 
 I still review diffs, run tests myself, and refuse fake “all green” claims when a run actually failed.

@@ -59,7 +59,7 @@ describe("listDocumentsRequest", () => {
                 name: "Owner",
                 email: "owner@example.com",
               },
-              mime_type: "application/pdf",
+              mime_type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
               file_size: 10,
               created_at: "2026-10-21T12:00:00+00:00",
             },

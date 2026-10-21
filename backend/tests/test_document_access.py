@@ -377,6 +377,7 @@ def test_authorized_download_returns_bytes(
     assert response.content == PAYLOAD
     assert response.headers["content-type"].startswith("application/pdf")
     assert response.headers["content-disposition"].startswith("attachment;")
+    assert ".pdf" in response.headers["content-disposition"]
     assert response.headers["x-content-type-options"] == "nosniff"
     assert "no-store" in response.headers["cache-control"]
     storage_mock.open_object.assert_called_once_with(doc.storage_key)

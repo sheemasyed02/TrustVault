@@ -1,18 +1,23 @@
 """Application configuration loaded from environment variables."""
 
 from functools import lru_cache
+from pathlib import Path
 
 from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from app.core.database_url import normalize_database_url
 
+# backend/app/core/config.py → backend/.env (independent of process cwd)
+_BACKEND_ROOT = Path(__file__).resolve().parents[2]
+_BACKEND_ENV_FILE = _BACKEND_ROOT / ".env"
+
 
 class Settings(BaseSettings):
     """Runtime settings. Secrets belong in environment variables, not source."""
 
     model_config = SettingsConfigDict(
-        env_file=".env",
+        env_file=str(_BACKEND_ENV_FILE),
         env_file_encoding="utf-8",
         extra="ignore",
         populate_by_name=True,

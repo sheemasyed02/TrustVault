@@ -204,6 +204,7 @@ def upload_document(
         category=clean_category,
         description=clean_description,
         storage_key=storage_key,
+        original_filename=validated.original_filename,
         mime_type=validated.media_type,
         file_size=validated.size_bytes,
         sha256_checksum=validated.sha256_hex,

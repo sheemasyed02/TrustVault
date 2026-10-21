@@ -5,12 +5,17 @@ import { useParams, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
 import { useAuth, useHandleUnauthorized } from "@/components/auth-provider";
+import { ConfirmDialog } from "@/components/confirm-dialog";
+import { DocumentMetadataForm } from "@/components/document-metadata-form";
+import { DocumentPermissionsPanel } from "@/components/document-permissions-panel";
+import { DocumentPreview } from "@/components/document-preview";
 import { useDocumentActions } from "@/hooks/use-document-actions";
 import {
   ApiError,
   getDocumentRequest,
   type DocumentDetail,
 } from "@/lib/api";
+import { getDocumentUiAccess } from "@/lib/document-access";
 import { formatBytes, formatDateTime, mimeLabel } from "@/lib/format";
 
 export default function DocumentDetailPage() {
@@ -21,6 +26,7 @@ export default function DocumentDetailPage() {
   const [doc, setDoc] = useState<DocumentDetail | null>(null);
   const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
   const [error, setError] = useState<string | null>(null);
+  const [errorStatus, setErrorStatus] = useState<number | null>(null);
 
   const actions = useDocumentActions(() => {
     router.push("/documents");
@@ -35,6 +41,7 @@ export default function DocumentDetailPage() {
     void (async () => {
       setStatus("loading");
       setError(null);
+      setErrorStatus(null);
       setDoc(null);
       try {
         const data = await getDocumentRequest(token, documentId, controller.signal);
@@ -44,7 +51,13 @@ export default function DocumentDetailPage() {
         if (err instanceof DOMException && err.name === "AbortError") return;
         if (handleUnauthorized(err)) return;
         setDoc(null);
-        setError(err instanceof ApiError ? err.detail : "Unable to load document.");
+        if (err instanceof ApiError) {
+          setError(err.detail);
+          setErrorStatus(err.status);
+        } else {
+          setError("Unable to load document.");
+          setErrorStatus(null);
+        }
         setStatus("error");
       }
     })();
@@ -54,7 +67,7 @@ export default function DocumentDetailPage() {
 
   if (!user) return null;
 
-  const isOwner = doc ? doc.owner.id === user.id : false;
+  const access = doc ? getDocumentUiAccess(user, doc) : null;
 
   return (
     <div className="space-y-5">
@@ -72,77 +85,125 @@ export default function DocumentDetailPage() {
       ) : null}
 
       {status === "error" ? (
-        <div role="alert" className="rounded-xl border border-danger/30 bg-danger/5 px-4 py-4 text-sm text-danger">
-          {error}
+        <div
+          role="alert"
+          className="rounded-xl border border-danger/30 bg-danger/5 px-4 py-4 text-sm text-danger"
+        >
+          <p>{error}</p>
           <p className="mt-2 text-muted">
-            No document metadata from the failed response is shown.
+            {errorStatus === 404
+              ? "The document is missing, deleted, or you do not have access. No private metadata is shown."
+              : "No document metadata from the failed response is shown."}
           </p>
         </div>
       ) : null}
 
-      {status === "ready" && doc ? (
-        <article className="rounded-xl border border-border bg-surface p-6 shadow-[var(--shadow)]">
-          <p className="text-sm font-semibold uppercase tracking-[0.18em] text-accent-strong">
-            Document details
-          </p>
-          <h1 className="mt-2 font-display text-3xl tracking-tight text-foreground">
-            {doc.title}
-          </h1>
-          <p className="mt-2 text-sm text-muted">
-            {isOwner ? "You own this document." : `Owned by ${doc.owner.name}.`}
-          </p>
+      {status === "ready" && doc && access ? (
+        <>
+          <article className="rounded-xl border border-border bg-surface p-6 shadow-[var(--shadow)]">
+            <p className="text-sm font-semibold uppercase tracking-[0.18em] text-accent-strong">
+              Document details
+            </p>
+            <h1 className="mt-2 font-display text-3xl tracking-tight text-foreground">
+              {doc.title}
+            </h1>
+            <p className="mt-2 text-sm text-muted">
+              {access.isOwner
+                ? "You own this document — you can view, edit, share, and delete."
+                : access.yourAccess === "EDIT"
+                  ? `Shared by ${doc.owner.name} with EDIT access — you can view and edit content and metadata.`
+                  : `Shared by ${doc.owner.name} with READ access — view and download only.`}
+            </p>
+            <p className="mt-1 text-xs font-semibold uppercase tracking-wide text-accent-strong">
+              Your access: {access.yourAccess}
+            </p>
 
-          <dl className="mt-6 grid gap-4 sm:grid-cols-2">
-            <Detail label="Category" value={doc.category} />
-            <Detail label="Type" value={mimeLabel(doc.mime_type)} />
-            <Detail label="Size" value={formatBytes(doc.file_size)} />
-            <Detail label="Created" value={formatDateTime(doc.created_at)} />
-            <Detail label="Updated" value={formatDateTime(doc.updated_at)} />
-            <Detail label="Owner email" value={doc.owner.email} />
-            <Detail label="Checksum" value={doc.sha256_checksum} />
-            <Detail
-              label="Description"
-              value={doc.description?.trim() ? doc.description : "—"}
-            />
-          </dl>
+            <dl className="mt-6 grid gap-4 sm:grid-cols-2">
+              <Detail label="Category" value={doc.category} />
+              <Detail label="Type" value={mimeLabel(doc.mime_type)} />
+              <Detail label="Size" value={formatBytes(doc.file_size)} />
+              <Detail label="Created" value={formatDateTime(doc.created_at)} />
+              <Detail label="Updated" value={formatDateTime(doc.updated_at)} />
+              <Detail label="Owner email" value={doc.owner.email} />
+              <Detail label="Checksum" value={doc.sha256_checksum} />
+              <Detail
+                label="Description"
+                value={doc.description?.trim() ? doc.description : "—"}
+              />
+            </dl>
 
-          <div className="mt-6 flex flex-wrap gap-2">
-            <button
-              type="button"
-              onClick={() => void actions.download(doc)}
-              disabled={actions.downloadingId === doc.id}
-              className="rounded-md bg-accent px-4 py-2 text-sm font-semibold text-white hover:bg-accent-strong disabled:opacity-60"
-            >
-              {actions.downloadingId === doc.id ? "Downloading…" : "Download"}
-            </button>
-            {isOwner ? (
+            <div className="mt-6 flex flex-wrap gap-2">
               <button
                 type="button"
-                onClick={() => void actions.remove(doc)}
-                className="rounded-md border border-danger/40 px-4 py-2 text-sm font-semibold text-danger"
+                onClick={() => void actions.download(doc)}
+                disabled={actions.downloadingId === doc.id}
+                className="rounded-md bg-accent px-4 py-2 text-sm font-semibold text-white hover:bg-accent-strong disabled:opacity-60"
               >
-                Delete
+                {actions.downloadingId === doc.id ? "Downloading…" : "Download"}
               </button>
+              {access.canDelete ? (
+                <button
+                  type="button"
+                  onClick={() => actions.requestDelete(doc)}
+                  className="rounded-md border border-danger/40 px-4 py-2 text-sm font-semibold text-danger"
+                >
+                  Delete
+                </button>
+              ) : null}
+            </div>
+
+            {actions.actionError ? (
+              <p role="alert" className="mt-3 text-sm text-danger">
+                {actions.actionError}
+              </p>
             ) : null}
-          </div>
+            {actions.actionMessage ? (
+              <p role="status" className="mt-3 text-sm text-accent-strong">
+                {actions.actionMessage}
+              </p>
+            ) : null}
+          </article>
 
-          <p className="mt-4 text-xs text-muted">
-            Edit metadata and permission management forms are not part of this
-            task. Those buttons are omitted on purpose.
-          </p>
+          <DocumentPreview
+            document={doc}
+            canEdit={access.canEditDocument}
+            onDocumentUpdated={setDoc}
+          />
 
-          {actions.actionError ? (
-            <p role="alert" className="mt-3 text-sm text-danger">
-              {actions.actionError}
-            </p>
-          ) : null}
-          {actions.actionMessage ? (
-            <p role="status" className="mt-3 text-sm text-accent-strong">
-              {actions.actionMessage}
-            </p>
-          ) : null}
-        </article>
+          {access.canEditDocument ? (
+            <DocumentMetadataForm
+              document={doc}
+              canEdit
+              onUpdated={setDoc}
+            />
+          ) : (
+            <section className="rounded-xl border border-border bg-surface p-5 text-sm text-muted">
+              <h2 className="font-display text-xl text-foreground">Metadata</h2>
+              <p className="mt-2">
+                You have READ access. Metadata editing requires EDIT permission
+                from the owner.
+              </p>
+            </section>
+          )}
+
+          <DocumentPermissionsPanel
+            documentId={doc.id}
+            canManage={access.canManageSharing}
+            ownerUserId={doc.owner.id}
+          />
+        </>
       ) : null}
+
+      <ConfirmDialog
+        open={actions.pendingDelete !== null}
+        title="Delete this document?"
+        description="Deleting removes the document from normal access (soft-delete) and attempts to remove the private storage object. This cannot be undone from the UI."
+        confirmLabel="Delete document"
+        danger
+        busy={actions.deleting}
+        onCancel={actions.cancelDelete}
+        onConfirm={() => void actions.confirmDelete()}
+      />
     </div>
   );
 }

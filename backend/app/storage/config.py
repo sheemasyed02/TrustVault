@@ -40,6 +40,18 @@ def _missing_r2_fields(settings: Settings) -> list[str]:
     return missing
 
 
+def r2_config_presence(settings: Settings | None = None) -> dict[str, bool]:
+    """Report which R2 setting *names* are present (never values)."""
+    resolved = settings or get_settings()
+    return {
+        "R2_ACCOUNT_ID": bool((resolved.r2_account_id or "").strip()),
+        "R2_ACCESS_KEY_ID": bool((resolved.r2_access_key_id or "").strip()),
+        "R2_SECRET_ACCESS_KEY": bool((resolved.r2_secret_access_key or "").strip()),
+        "R2_BUCKET_NAME": bool((resolved.r2_bucket_name or "").strip()),
+        "R2_ENDPOINT_URL": bool((resolved.r2_endpoint_url or "").strip()),
+    }
+
+
 def load_r2_config(settings: Settings | None = None) -> R2Config:
     """Load R2 settings or raise a safe configuration error."""
     resolved = settings or get_settings()
@@ -49,7 +61,11 @@ def load_r2_config(settings: Settings | None = None) -> R2Config:
             "Cloudflare R2 is not configured. Missing: " + ", ".join(missing)
         )
 
+    account_id = resolved.r2_account_id.strip()
     endpoint = resolved.r2_endpoint_url.strip()
+    # Allow a bare account-id-based default when the URL was left as a placeholder.
+    if "your_account_id" in endpoint.lower():
+        endpoint = f"https://{account_id}.r2.cloudflarestorage.com"
     if not (
         endpoint.startswith("https://")
         or endpoint.startswith("http://")
@@ -59,7 +75,7 @@ def load_r2_config(settings: Settings | None = None) -> R2Config:
         )
 
     return R2Config(
-        account_id=resolved.r2_account_id.strip(),
+        account_id=account_id,
         access_key_id=resolved.r2_access_key_id.strip(),
         secret_access_key=resolved.r2_secret_access_key.strip(),
         bucket_name=resolved.r2_bucket_name.strip(),

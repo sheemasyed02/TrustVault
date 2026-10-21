@@ -22,6 +22,7 @@ Project rules: see [`AGENTS.md`](AGENTS.md).
 - `backend/` — `GET /health`, PostgreSQL schema, private R2 service, secure auth, document authorization service, and:
   - `POST /auth/login`
   - `GET /users/me`
+  - `GET /users/search` (active users by name/email for sharing)
   - `POST /documents` (OWNER upload to private R2)
 - Document list/download/sharing/deletion APIs are not implemented yet.
 

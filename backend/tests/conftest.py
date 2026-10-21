@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Generator
+from pathlib import Path
 
 import pytest
 from dotenv import load_dotenv
@@ -12,7 +13,8 @@ from app.core.config import get_settings
 from app.core.database_url import DatabaseURLError
 from app.db.session import get_session_factory, reset_engine
 
-load_dotenv()
+# Load backend/.env regardless of the pytest working directory.
+load_dotenv(Path(__file__).resolve().parents[1] / ".env")
 
 
 @pytest.fixture()

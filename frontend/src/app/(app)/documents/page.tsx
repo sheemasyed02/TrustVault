@@ -1,8 +1,10 @@
 "use client";
 
+import Link from "next/link";
 import { useMemo, useState } from "react";
 
 import { useAuth } from "@/components/auth-provider";
+import { ConfirmDialog } from "@/components/confirm-dialog";
 import {
   DocumentFilters,
   toApiDateBound,
@@ -99,9 +101,16 @@ export default function MyDocumentsPage() {
         <div className="rounded-xl border border-dashed border-border bg-surface px-6 py-10 text-center">
           <p className="font-medium text-foreground">No owned documents found</p>
           <p className="mt-2 text-sm text-muted">
-            Upload is not on this screen yet. When you have uploads, they will appear
-            here from the live API.
+            Upload a file to create your first document.
           </p>
+          {user.role === "OWNER" ? (
+            <Link
+              href="/documents/upload"
+              className="mt-4 inline-block text-sm font-semibold text-accent-strong"
+            >
+              Go to upload
+            </Link>
+          ) : null}
         </div>
       ) : null}
 
@@ -113,7 +122,7 @@ export default function MyDocumentsPage() {
             mode="owned"
             downloadingId={actions.downloadingId}
             onDownload={(doc) => void actions.download(doc)}
-            onDelete={(doc) => void actions.remove(doc)}
+            onDelete={(doc) => actions.requestDelete(doc)}
           />
           <PaginationBar
             page={list.page}
@@ -123,6 +132,17 @@ export default function MyDocumentsPage() {
           />
         </>
       ) : null}
+
+      <ConfirmDialog
+        open={actions.pendingDelete !== null}
+        title="Delete this document?"
+        description="Deleting removes the document from normal access and attempts private storage cleanup."
+        confirmLabel="Delete document"
+        danger
+        busy={actions.deleting}
+        onCancel={actions.cancelDelete}
+        onConfirm={() => void actions.confirmDelete()}
+      />
     </div>
   );
 }

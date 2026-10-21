@@ -16,14 +16,37 @@ from app.cli.seed_demo_users import (
     seed_demo_users,
 )
 from app.core.security import hash_password, verify_password
-from app.db.models import User
+from app.db.models import AuditEvent, Document, DocumentPermission, User
 from app.services.auth_service import normalize_email
 
 DEMO_EMAILS = [normalize_email(account.email) for account in DEMO_ACCOUNTS]
 
 
 def _clear_demo_users(session: Session) -> None:
-    """Remove demo emails inside the test transaction (rolled back afterward)."""
+    """Remove demo emails inside the test transaction (rolled back afterward).
+
+    Demo OWNER accounts may own documents from manual UI testing against the
+    shared local database; clear dependent rows before deleting users.
+    """
+    demo_ids = select(User.id).where(User.email.in_(DEMO_EMAILS)).scalar_subquery()
+    demo_doc_ids = (
+        select(Document.id).where(Document.owner_id.in_(demo_ids)).scalar_subquery()
+    )
+    session.execute(
+        delete(DocumentPermission).where(
+            DocumentPermission.document_id.in_(demo_doc_ids)
+            | DocumentPermission.user_id.in_(demo_ids)
+            | DocumentPermission.granted_by.in_(demo_ids)
+        )
+    )
+    session.execute(
+        delete(AuditEvent).where(
+            AuditEvent.document_id.in_(demo_doc_ids)
+            | AuditEvent.actor_id.in_(demo_ids)
+            | AuditEvent.target_user_id.in_(demo_ids)
+        )
+    )
+    session.execute(delete(Document).where(Document.owner_id.in_(demo_ids)))
     session.execute(delete(User).where(User.email.in_(DEMO_EMAILS)))
     session.flush()
 

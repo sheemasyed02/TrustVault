@@ -7,6 +7,7 @@ import math
 import uuid
 from collections.abc import Iterator
 from datetime import datetime
+from typing import Literal
 
 from fastapi import (
     APIRouter,
@@ -28,6 +29,7 @@ from app.api.deps import get_current_user
 from app.db.models import Document, User
 from app.db.session import get_db
 from app.schemas.documents import (
+    DocumentContentUpdateRequest,
     DocumentCreatedResponse,
     DocumentDeleteResponse,
     DocumentDetailResponse,
@@ -38,7 +40,13 @@ from app.schemas.documents import (
 )
 from app.services.document_authorization import (
     DocumentAuthorizationError,
+    caller_access_level,
     require_document_read,
+    require_document_read_context,
+)
+from app.services.document_content import (
+    DocumentContentError,
+    replace_document_text_content,
 )
 from app.services.document_deletion import (
     DocumentDeletionError,
@@ -105,18 +113,20 @@ def _owner_summary(document: Document) -> DocumentOwnerSummary:
     return DocumentOwnerSummary.model_validate(document.owner)
 
 
-def _detail_response(document: Document) -> DocumentDetailResponse:
+def _detail_response(document: Document, *, your_access: str) -> DocumentDetailResponse:
     return DocumentDetailResponse(
         id=document.id,
         title=document.title,
         category=document.category,
         description=document.description,
         owner=_owner_summary(document),
+        original_filename=document.original_filename,
         mime_type=document.mime_type,
         file_size=document.file_size,
         sha256_checksum=document.sha256_checksum,
         created_at=document.created_at,
         updated_at=document.updated_at,
+        your_access=your_access,
     )
 
 
@@ -195,6 +205,7 @@ async def create_document(
         category=document.category,
         description=document.description,
         owner=DocumentOwnerSummary.model_validate(current_user),
+        original_filename=document.original_filename,
         mime_type=document.mime_type,
         file_size=document.file_size,
         sha256_checksum=document.sha256_checksum,
@@ -264,6 +275,7 @@ def list_documents(
                 title=doc.title,
                 category=doc.category,
                 owner=_owner_summary(doc),
+                original_filename=doc.original_filename,
                 mime_type=doc.mime_type,
                 file_size=doc.file_size,
                 created_at=doc.created_at,
@@ -285,10 +297,14 @@ def get_document_metadata(
     audit: UploadAuditHook = Depends(get_document_audit),
     x_request_id: str | None = Header(default=None, alias="X-Request-ID"),
 ) -> DocumentDetailResponse:
-    """Return safe metadata after centralized read authorization."""
+    """Return safe metadata after centralized read authorization.
+
+    Includes `your_access` (OWNER | EDIT | READ) so the UI can show edit vs
+    read-only controls without trusting client role claims.
+    """
     request_id = (x_request_id or str(uuid.uuid4())).strip() or str(uuid.uuid4())
     try:
-        document = require_document_read(
+        access_ctx = require_document_read_context(
             session,
             user=current_user,
             document_id=document_id,
@@ -304,11 +320,13 @@ def get_document_metadata(
         )
         raise HTTPException(status_code=exc.status_code, detail=exc.detail) from None
 
+    your_access = caller_access_level(access_ctx)
+
     # Reload with owner for response; storage_key must never be serialized.
     document = session.scalars(
         select(Document)
         .options(joinedload(Document.owner))
-        .where(Document.id == document.id)
+        .where(Document.id == access_ctx.document.id)
     ).unique().one_or_none()
     if document is None:
         audit.record(
@@ -332,7 +350,7 @@ def get_document_metadata(
         document_id=document.id,
         request_id=request_id,
     )
-    return _detail_response(document)
+    return _detail_response(document, your_access=your_access)
 
 
 @router.patch("/{document_id}", response_model=DocumentDetailResponse)
@@ -397,7 +415,85 @@ def patch_document_metadata(
             detail="Metadata update could not be audited",
         ) from exc
 
-    return _detail_response(result.document)
+    # Successful PATCH implies OWNER or EDIT (authorization already enforced).
+    your_access = (
+        "OWNER" if result.document.owner_id == current_user.id else "EDIT"
+    )
+    document = session.scalars(
+        select(Document)
+        .options(joinedload(Document.owner))
+        .where(Document.id == result.document.id)
+    ).unique().one()
+    return _detail_response(document, your_access=your_access)
+
+
+@router.put("/{document_id}/content", response_model=DocumentDetailResponse)
+def put_document_content(
+    body: DocumentContentUpdateRequest,
+    document_id: uuid.UUID = Path(...),
+    current_user: User = Depends(get_current_user),
+    session: Session = Depends(get_db),
+    storage: R2StorageService = Depends(get_storage),
+    audit: UploadAuditHook = Depends(get_document_audit),
+    x_request_id: str | None = Header(default=None, alias="X-Request-ID"),
+) -> DocumentDetailResponse:
+    """Replace DOCX body text for the owner or an active EDIT grantee.
+
+    READ grantees receive 403. Rebuilds a DOCX in private R2 under the existing
+    opaque key and updates size/checksum. Does not change ownership or grants.
+    """
+    request_id = (x_request_id or str(uuid.uuid4())).strip() or str(uuid.uuid4())
+    try:
+        result = replace_document_text_content(
+            session,
+            actor=current_user,
+            document_id=document_id,
+            text=body.text,
+            storage=storage,
+        )
+    except DocumentAuthorizationError as exc:
+        audit.record(
+            action="DOCUMENT_CONTENT_UPDATE",
+            outcome="DENIED",
+            reason_code=exc.reason_code,
+            actor_id=current_user.id,
+            document_id=document_id,
+            request_id=request_id,
+        )
+        raise HTTPException(status_code=exc.status_code, detail=exc.detail) from None
+    except DocumentContentError as exc:
+        audit.record(
+            action="DOCUMENT_CONTENT_UPDATE",
+            outcome="DENIED",
+            reason_code=exc.reason_code,
+            actor_id=current_user.id,
+            document_id=document_id,
+            request_id=request_id,
+        )
+        raise HTTPException(status_code=exc.status_code, detail=exc.message) from None
+
+    try:
+        audit.record(
+            action="DOCUMENT_CONTENT_UPDATE",
+            outcome="SUCCESS",
+            reason_code=None,
+            actor_id=current_user.id,
+            document_id=result.document.id,
+            request_id=request_id,
+        )
+    except Exception as exc:
+        logger.exception("Audit failed after content update")
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Content update could not be audited",
+        ) from exc
+
+    document = session.scalars(
+        select(Document)
+        .options(joinedload(Document.owner))
+        .where(Document.id == result.document.id)
+    ).unique().one()
+    return _detail_response(document, your_access=result.your_access)
 
 
 @router.delete("/{document_id}", response_model=DocumentDeleteResponse)
@@ -457,7 +553,12 @@ def delete_document(
         )
     except Exception as exc:
         # Tombstone + R2 cleanup already applied; do not revive the document.
+        # Commit before raising: get_db rolls back on HTTPException.
         logger.exception("Audit failed after document delete")
+        try:
+            session.commit()
+        except Exception:
+            logger.exception("Failed to commit soft-delete after audit failure")
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Document deleted but audit failed",
@@ -473,16 +574,21 @@ def delete_document(
 @router.get("/{document_id}/download")
 def download_document(
     document_id: uuid.UUID = Path(...),
+    disposition: Literal["attachment", "inline"] = Query(
+        default="attachment",
+        description="attachment saves the file; inline is for authenticated content preview",
+    ),
     current_user: User = Depends(get_current_user),
     session: Session = Depends(get_db),
     storage: R2StorageService = Depends(get_storage),
     audit: UploadAuditHook = Depends(get_document_audit),
     x_request_id: str | None = Header(default=None, alias="X-Request-ID"),
 ) -> StreamingResponse:
-    """Stream file bytes from private R2 only after authorization succeeds.
+    """Stream original file bytes from private R2 only after authorization succeeds.
 
     Never issues public or presigned URLs. Object key is taken from PostgreSQL
     only. Each request re-checks current ownership/grants (immediate revocation).
+    Bytes are streamed unchanged — no text/JSON/Base64 conversion.
     """
     request_id = (x_request_id or str(uuid.uuid4())).strip() or str(uuid.uuid4())
 
@@ -533,6 +639,12 @@ def download_document(
 
     filename = safe_download_filename(document)
     content_type = document.mime_type or "application/octet-stream"
+    # Inline is only meaningful for types the browser can render; always safe.
+    content_disposition = (
+        f'inline; filename="{filename}"'
+        if disposition == "inline"
+        else f'attachment; filename="{filename}"'
+    )
 
     def stream_body() -> Iterator[bytes]:
         try:
@@ -554,7 +666,7 @@ def download_document(
     )
 
     headers = {
-        "Content-Disposition": f'attachment; filename="{filename}"',
+        "Content-Disposition": content_disposition,
         "X-Content-Type-Options": "nosniff",
         "Cache-Control": "private, no-store",
         "X-Request-ID": request_id,

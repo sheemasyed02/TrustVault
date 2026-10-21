@@ -22,6 +22,7 @@ class DocumentCreatedResponse(BaseModel):
     category: str
     description: str | None = None
     owner: DocumentOwnerSummary
+    original_filename: str | None = None
     mime_type: str
     file_size: int = Field(ge=0)
     sha256_checksum: str
@@ -35,6 +36,7 @@ class DocumentListItem(BaseModel):
     title: str
     category: str
     owner: DocumentOwnerSummary
+    original_filename: str | None = None
     mime_type: str
     file_size: int = Field(ge=0)
     created_at: datetime
@@ -54,11 +56,14 @@ class DocumentDetailResponse(BaseModel):
     category: str
     description: str | None = None
     owner: DocumentOwnerSummary
+    original_filename: str | None = None
     mime_type: str
     file_size: int = Field(ge=0)
     sha256_checksum: str
     created_at: datetime
     updated_at: datetime
+    # Caller's effective access from PostgreSQL (never trust client claims).
+    your_access: str = Field(description="OWNER, EDIT, or READ")
 
 
 class DocumentMetadataUpdateRequest(BaseModel):
@@ -69,6 +74,14 @@ class DocumentMetadataUpdateRequest(BaseModel):
     title: str | None = None
     category: str | None = None
     description: str | None = None
+
+
+class DocumentContentUpdateRequest(BaseModel):
+    """Plain-text body used to rebuild the stored DOCX for in-app editors."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    text: str = Field(..., max_length=500_000)
 
 
 class DocumentDeleteResponse(BaseModel):

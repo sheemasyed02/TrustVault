@@ -280,4 +280,3 @@ def audit_sharing_event(
         target_user_id=target_user_id,
         request_id=request_id,
     )
-

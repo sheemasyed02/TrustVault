@@ -20,7 +20,7 @@ from app.storage import (
     generate_object_key,
     get_storage_service,
 )
-from app.storage.config import load_r2_config
+from app.storage.config import load_r2_config, r2_config_presence
 
 
 def _settings(**overrides: Any) -> Settings:
@@ -63,6 +63,25 @@ def test_missing_r2_configuration_fails_safely():
     assert "R2_ACCESS_KEY_ID" in message
     assert "super-secret" not in message
     assert "AKIA_TEST_KEY" not in message
+
+
+def test_r2_config_presence_reports_names_not_values():
+    presence = r2_config_presence(_settings())
+    assert presence["R2_ACCOUNT_ID"] is True
+    assert presence["R2_SECRET_ACCESS_KEY"] is True
+    serialized = str(presence)
+    assert "super-secret" not in serialized
+    assert "AKIA_TEST_KEY" not in serialized
+
+
+def test_placeholder_endpoint_rewritten_from_account_id():
+    config = load_r2_config(
+        _settings(
+            R2_ENDPOINT_URL="https://your_account_id.r2.cloudflarestorage.com",
+            R2_ACCOUNT_ID="acct999",
+        )
+    )
+    assert config.endpoint_url == "https://acct999.r2.cloudflarestorage.com"
 
 
 def test_get_storage_service_builds_boto_client_with_endpoint_and_bucket():

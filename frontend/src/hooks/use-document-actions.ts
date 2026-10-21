@@ -7,6 +7,7 @@ import {
   ApiError,
   deleteDocumentRequest,
   downloadDocumentRequest,
+  resolveDownloadFilename,
   type DocumentListItem,
 } from "@/lib/api";
 
@@ -26,21 +27,32 @@ export function useDocumentActions(onDeleted?: () => void) {
   const { accessToken } = useAuth();
   const handleUnauthorized = useHandleUnauthorized();
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState(false);
+  const [pendingDelete, setPendingDelete] = useState<Pick<
+    DocumentListItem,
+    "id" | "title"
+  > | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [actionMessage, setActionMessage] = useState<string | null>(null);
 
   const download = useCallback(
-    async (doc: Pick<DocumentListItem, "id" | "title">) => {
+    async (
+      doc: Pick<DocumentListItem, "id" | "title"> &
+        Partial<Pick<DocumentListItem, "mime_type" | "original_filename">>,
+    ) => {
       if (!accessToken) return;
       setActionError(null);
       setActionMessage(null);
       setDownloadingId(doc.id);
       try {
         const result = await downloadDocumentRequest(accessToken, doc.id);
-        triggerBrowserDownload(
-          result.blob,
-          result.filename || `${doc.title || "document"}.bin`,
-        );
+        const filename = resolveDownloadFilename({
+          headerFilename: result.filename,
+          fallbackTitle: doc.title,
+          originalFilename: doc.original_filename,
+          contentType: result.contentType || doc.mime_type,
+        });
+        triggerBrowserDownload(result.blob, filename);
         setActionMessage("Download started.");
       } catch (error) {
         if (handleUnauthorized(error)) return;
@@ -54,36 +66,52 @@ export function useDocumentActions(onDeleted?: () => void) {
     [accessToken, handleUnauthorized],
   );
 
-  const remove = useCallback(
-    async (doc: Pick<DocumentListItem, "id" | "title">) => {
-      if (!accessToken) return;
-      const confirmed = window.confirm(
-        `Delete “${doc.title}”? This soft-deletes the document and removes it from lists.`,
-      );
-      if (!confirmed) return;
-      setActionError(null);
-      setActionMessage(null);
-      try {
-        const result = await deleteDocumentRequest(accessToken, doc.id);
+  const requestDelete = useCallback((doc: Pick<DocumentListItem, "id" | "title">) => {
+    setActionError(null);
+    setActionMessage(null);
+    setPendingDelete(doc);
+  }, []);
+
+  const cancelDelete = useCallback(() => {
+    if (!deleting) setPendingDelete(null);
+  }, [deleting]);
+
+  const confirmDelete = useCallback(async () => {
+    if (!accessToken || !pendingDelete || deleting) return;
+    setDeleting(true);
+    setActionError(null);
+    setActionMessage(null);
+    try {
+      const result = await deleteDocumentRequest(accessToken, pendingDelete.id);
+      if (result.storage_cleanup === "completed" || result.storage_cleanup === "already_absent") {
         setActionMessage(
           result.storage_cleanup === "completed"
             ? "Document deleted."
             : "Document deleted (storage object was already absent).",
         );
+        setPendingDelete(null);
         onDeleted?.();
-      } catch (error) {
-        if (handleUnauthorized(error)) return;
-        setActionError(
-          error instanceof ApiError ? error.detail : "Delete failed.",
-        );
+      } else {
+        setActionError("Delete response was incomplete.");
       }
-    },
-    [accessToken, handleUnauthorized, onDeleted],
-  );
+    } catch (error) {
+      if (handleUnauthorized(error)) return;
+      setActionError(
+        error instanceof ApiError ? error.detail : "Delete failed.",
+      );
+      setPendingDelete(null);
+    } finally {
+      setDeleting(false);
+    }
+  }, [accessToken, deleting, handleUnauthorized, onDeleted, pendingDelete]);
 
   return {
     download,
-    remove,
+    requestDelete,
+    confirmDelete,
+    cancelDelete,
+    pendingDelete,
+    deleting,
     downloadingId,
     actionError,
     actionMessage,

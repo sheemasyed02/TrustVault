@@ -22,11 +22,12 @@ export function formatDateTime(iso: string): string {
 
 export function mimeLabel(mime: string): string {
   const map: Record<string, string> = {
-    "application/pdf": "PDF",
     "application/vnd.openxmlformats-officedocument.wordprocessingml.document":
       "DOCX",
-    "image/png": "PNG",
-    "image/jpeg": "JPEG",
+    // Legacy labels for older uploads that are no longer accepted.
+    "application/pdf": "PDF (legacy)",
+    "image/png": "PNG (legacy)",
+    "image/jpeg": "JPEG (legacy)",
   };
   return map[mime] ?? mime;
 }

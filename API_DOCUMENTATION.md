@@ -82,6 +82,47 @@ Loads the current user from PostgreSQL using the token `sub`. Rejects missing, i
 
 Never includes `password_hash`.
 
+### `GET /users/search`
+
+Requires `Authorization: Bearer <access_token>`.
+
+Authenticated directory lookup for share recipients. Searches **active** registered users by `name` or `email` (case-insensitive substring). Excludes the caller. Does not return inactive accounts.
+
+**Query parameters**
+
+| Param | Required | Notes |
+| --- | --- | --- |
+| `q` | Yes | Trimmed; minimum **2** characters; maximum 128. Matches name/email substring, or an **exact user UUID** when `q` is a UUID |
+| `page` | No | Default `1` |
+| `page_size` | No | Default `10`; maximum `20` |
+| `exclude_user_id` | No | Comma-separated user UUIDs to omit (e.g. document owner) |
+
+Empty or single-character `q` values are rejected (`422`) so callers cannot dump the full directory. The caller is always excluded.
+
+**Response `200`**
+
+```json
+{
+  "results": [
+    {
+      "id": "33333333-3333-3333-3333-333333333333",
+      "name": "Bob Viewer",
+      "email": "bob@example.com"
+    }
+  ],
+  "page": 1,
+  "page_size": 10,
+  "total": 1,
+  "total_pages": 1
+}
+```
+
+Each hit includes only `id`, `name`, and `email`. Never includes `password_hash`, tokens, roles, or full account records. LIKE metacharacters in `q` are escaped so `%` / `_` are matched literally.
+
+**Errors:** `401` unauthenticated / inactive caller; `422` invalid `q` / pagination.
+
+Granting access still uses `POST /documents/{document_id}/permissions` with the selected `user_id`. Search alone does not grant permissions.
+
 ### `POST /documents`
 
 Authenticated **OWNER** only. Uploads a file to private Cloudflare R2 and stores metadata in PostgreSQL.
@@ -90,7 +131,7 @@ Authenticated **OWNER** only. Uploads a file to private Cloudflare R2 and stores
 
 | Field | Required | Notes |
 | --- | --- | --- |
-| `file` | Yes | PDF, DOCX, PNG, or JPEG; max **10 MiB** |
+| `file` | Yes | **DOCX only** (Word document); max **10 MiB** |
 | `title` | Yes | Trimmed; max 255 characters |
 | `category` | Yes | Trimmed; max 128 characters |
 | `description` | No | Trimmed; max 5000 characters |
@@ -102,7 +143,7 @@ Not accepted as authoritative (ignored if sent): `owner_id`, `storage_key`, chec
 - Empty files rejected (`400`).
 - Oversized files rejected (`413`).
 - Unsupported or mismatched type/extension/content rejected (`415`).
-- Extension and client MIME type are not trusted alone; magic bytes / DOCX ZIP structure are checked.
+- Only `.docx` is accepted. Extension and client MIME type are not trusted alone; DOCX ZIP structure (`[Content_Types].xml`, `word/document.xml`) is checked. PDF, PNG, and JPEG uploads are rejected (`415`).
 - This is **not** malware scanning.
 
 **Response `201`**
@@ -197,9 +238,15 @@ List items omit `description`, `storage_key`, checksum, and file bytes. Invalid 
 
 Authenticated. Returns safe metadata after centralized **read** authorization (`require_document_read`).
 
-Includes: title, category, description, owner summary, mime type, size, SHA-256 checksum, `created_at`, `updated_at`.
+Includes: title, category, description, owner summary, mime type, size, SHA-256 checksum, `created_at`, `updated_at`, and **`your_access`** (`OWNER` | `EDIT` | `READ`) derived from the current PostgreSQL ownership/grant row for the caller.
 
 Never returns `storage_key`, credentials, or file bytes.
+
+UI capability rules (server still enforces on every mutation):
+
+- `OWNER` — view, edit content/metadata, share, delete
+- `EDIT` — view, edit content/metadata (no share/delete)
+- `READ` — view and download only
 
 | Status | Meaning |
 | --- | --- |
@@ -311,6 +358,30 @@ Authenticated **document owner** only. Soft-revokes the active grant (`revoked_a
 **Immediate revocation:** the next `GET` metadata/download/list check queries PostgreSQL for `revoked_at IS NULL`. JWTs are not permission caches. Already-downloaded local copies are outside TrustVault control.
 
 **Sharing audit (non-durable):** `DOCUMENT_PERMISSION_LIST` / `_GRANT` / `_REVOKE` with SUCCESS or DENIED, optional `target_user_id`, `persisted=false`.
+
+### `PUT /documents/{document_id}/content`
+
+Authenticated. Replace the stored DOCX body for the **document owner** or an **active EDIT** grantee. READ grantees receive `403`. Rebuilds a minimal DOCX from plain text under the existing private R2 key and updates `file_size` / `sha256_checksum`. Complex Word formatting is not preserved.
+
+**Request**
+
+```json
+{
+  "text": "Updated document body\\nSecond paragraph"
+}
+```
+
+**Response `200`:** same safe detail shape as `GET /documents/{id}` (includes `your_access`).
+
+| Status | Meaning |
+| --- | --- |
+| 200 | Content replaced |
+| 401 | Unauthenticated / inactive |
+| 403 | Relationship exists but not edit rights (e.g. READ grant) |
+| 404 | Missing, soft-deleted, or inaccessible |
+| 415 | Non-DOCX document |
+| 422 | Invalid / oversized text |
+| 503 | Storage or persistence failure |
 
 ### `PATCH /documents/{document_id}`
 

@@ -110,14 +110,24 @@ def _user(
     return user
 
 
-def _document(session: Session, owner: User) -> Document:
+DOCX_MIME = (
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+)
+
+
+def _document(
+    session: Session,
+    owner: User,
+    *,
+    mime_type: str = "application/pdf",
+) -> Document:
     doc = Document(
         owner_id=owner.id,
         title="Shared Contract",
         category="Legal",
         description="private",
         storage_key=f"objects/{uuid.uuid4()}",
-        mime_type="application/pdf",
+        mime_type=mime_type,
         file_size=len(PAYLOAD),
         sha256_checksum="d" * 64,
     )

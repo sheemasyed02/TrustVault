@@ -33,6 +33,7 @@ export interface DocumentListItem {
   title: string;
   category: string;
   owner: DocumentOwnerSummary;
+  original_filename?: string | null;
   mime_type: string;
   file_size: number;
   created_at: string;
@@ -46,17 +47,22 @@ export interface DocumentListResponse {
   total_pages: number;
 }
 
+/** Effective document access for the authenticated caller (from PostgreSQL). */
+export type DocumentAccessLevel = "OWNER" | "EDIT" | "READ";
+
 export interface DocumentDetail {
   id: string;
   title: string;
   category: string;
   description: string | null;
   owner: DocumentOwnerSummary;
+  original_filename?: string | null;
   mime_type: string;
   file_size: number;
   sha256_checksum: string;
   created_at: string;
   updated_at: string;
+  your_access: DocumentAccessLevel;
 }
 
 export interface DocumentDeleteResponse {
@@ -248,6 +254,51 @@ export async function getCurrentUserRequest(
   });
 }
 
+/** Minimal share-recipient fields from GET /users/search. */
+export interface UserSearchHit {
+  id: string;
+  name: string;
+  email: string;
+}
+
+export interface UserSearchResponse {
+  results: UserSearchHit[];
+  page: number;
+  page_size: number;
+  total: number;
+  total_pages: number;
+}
+
+export interface UserSearchParams {
+  q: string;
+  page?: number;
+  page_size?: number;
+  /** Omit these user ids (e.g. document owner) from results. */
+  exclude_user_id?: string | string[];
+}
+
+/** Authenticated directory search — never hardcode demo users in the UI. */
+export async function searchUsersRequest(
+  token: string,
+  params: UserSearchParams,
+  signal?: AbortSignal,
+): Promise<UserSearchResponse> {
+  const exclude = Array.isArray(params.exclude_user_id)
+    ? params.exclude_user_id.filter(Boolean).join(",")
+    : params.exclude_user_id;
+  const query = buildQuery({
+    q: params.q,
+    page: params.page,
+    page_size: params.page_size,
+    exclude_user_id: exclude || undefined,
+  });
+  return apiRequest<UserSearchResponse>(`/users/search${query}`, {
+    method: "GET",
+    token,
+    signal,
+  });
+}
+
 export async function listDocumentsRequest(
   token: string,
   params: DocumentListParams = {},
@@ -294,27 +345,146 @@ export async function deleteDocumentRequest(
   });
 }
 
-export interface DownloadResult {
-  blob: Blob;
-  filename: string | null;
-  contentType: string | null;
+export interface DocumentMetadataPatch {
+  title?: string;
+  category?: string;
+  description?: string | null;
 }
 
-/** Authorized download — streams through the API (no public R2 URL). */
-export async function downloadDocumentRequest(
+export async function patchDocumentRequest(
+  token: string,
+  documentId: string,
+  body: DocumentMetadataPatch,
+  signal?: AbortSignal,
+): Promise<DocumentDetail> {
+  return apiRequest<DocumentDetail>(`/documents/${documentId}`, {
+    method: "PATCH",
+    token,
+    body,
+    signal,
+  });
+}
+
+export interface DocumentContentPatch {
+  text: string;
+}
+
+/** Replace DOCX body text — owner or EDIT grantee only. */
+export async function putDocumentContentRequest(
+  token: string,
+  documentId: string,
+  body: DocumentContentPatch,
+  signal?: AbortSignal,
+): Promise<DocumentDetail> {
+  return apiRequest<DocumentDetail>(`/documents/${documentId}/content`, {
+    method: "PUT",
+    token,
+    body,
+    signal,
+  });
+}
+
+export type DocumentPermissionLevel = "READ" | "EDIT";
+
+export interface PermissionUserSummary {
+  id: string;
+  name: string;
+  email: string;
+}
+
+export interface PermissionGrant {
+  id: string;
+  document_id: string;
+  user: PermissionUserSummary;
+  permission: DocumentPermissionLevel | string;
+  granted_at: string;
+  granted_by: PermissionUserSummary;
+  regranted: boolean;
+}
+
+export interface PermissionListResponse {
+  document_id: string;
+  permissions: PermissionGrant[];
+}
+
+export interface PermissionRevokeResponse {
+  document_id: string;
+  user_id: string;
+  permission: string;
+  revoked_at: string;
+}
+
+export async function listDocumentPermissionsRequest(
   token: string,
   documentId: string,
   signal?: AbortSignal,
-): Promise<DownloadResult> {
+): Promise<PermissionListResponse> {
+  return apiRequest<PermissionListResponse>(
+    `/documents/${documentId}/permissions`,
+    { method: "GET", token, signal },
+  );
+}
+
+export async function grantDocumentPermissionRequest(
+  token: string,
+  documentId: string,
+  body: { user_id: string; permission: DocumentPermissionLevel },
+  signal?: AbortSignal,
+): Promise<PermissionGrant> {
+  return apiRequest<PermissionGrant>(`/documents/${documentId}/permissions`, {
+    method: "POST",
+    token,
+    body,
+    signal,
+  });
+}
+
+export async function revokeDocumentPermissionRequest(
+  token: string,
+  documentId: string,
+  userId: string,
+  signal?: AbortSignal,
+): Promise<PermissionRevokeResponse> {
+  return apiRequest<PermissionRevokeResponse>(
+    `/documents/${documentId}/permissions/${userId}`,
+    { method: "DELETE", token, signal },
+  );
+}
+
+export interface UploadDocumentFields {
+  title: string;
+  category: string;
+  description?: string;
+  file: File;
+}
+
+/**
+ * Multipart upload. Do not set Content-Type manually — the browser must
+ * supply the multipart boundary.
+ */
+export async function uploadDocumentRequest(
+  token: string,
+  fields: UploadDocumentFields,
+  signal?: AbortSignal,
+): Promise<DocumentDetail> {
   const base = getApiBaseUrl();
+  const form = new FormData();
+  form.append("title", fields.title);
+  form.append("category", fields.category);
+  if (fields.description !== undefined && fields.description !== "") {
+    form.append("description", fields.description);
+  }
+  form.append("file", fields.file);
+
   let response: Response;
   try {
-    response = await fetch(joinUrl(base, `/documents/${documentId}/download`), {
-      method: "GET",
+    response = await fetch(joinUrl(base, "/documents"), {
+      method: "POST",
       headers: {
+        Accept: "application/json",
         Authorization: `Bearer ${token}`,
-        Accept: "*/*",
       },
+      body: form,
       signal,
       cache: "no-store",
     });
@@ -333,19 +503,167 @@ export async function downloadDocumentRequest(
     throw new ApiError(response.status, detail);
   }
 
-  const disposition = response.headers.get("content-disposition");
-  let filename: string | null = null;
-  if (disposition) {
-    const match = /filename="([^"]+)"/i.exec(disposition);
-    if (match?.[1]) filename = match[1];
+  const contentType = response.headers.get("content-type") ?? "";
+  if (!contentType.includes("application/json")) {
+    throw new ApiError(
+      response.status,
+      "Unexpected non-JSON response from the TrustVault API.",
+    );
   }
 
-  const blob = await response.blob();
+  return (await response.json()) as DocumentDetail;
+}
+
+export interface DownloadResult {
+  blob: Blob;
+  filename: string | null;
+  contentType: string | null;
+}
+
+const MIME_EXTENSIONS: Record<string, string> = {
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document":
+    ".docx",
+  // Legacy types may still exist for older uploads.
+  "application/pdf": ".pdf",
+  "image/png": ".png",
+  "image/jpeg": ".jpg",
+};
+
+/** Prefer Content-Disposition; never invent a misleading .bin for known types. */
+export function resolveDownloadFilename(options: {
+  headerFilename: string | null;
+  fallbackTitle?: string | null;
+  originalFilename?: string | null;
+  contentType?: string | null;
+}): string {
+  if (options.headerFilename?.trim()) return options.headerFilename.trim();
+  const raw =
+    options.originalFilename?.trim() ||
+    options.fallbackTitle?.trim() ||
+    "document";
+  const base = raw.replace(/[\\/]+/g, "_").slice(0, 200) || "document";
+  const mime = (options.contentType ?? "").split(";")[0]?.trim().toLowerCase();
+  const ext = mime ? MIME_EXTENSIONS[mime] : undefined;
+  if (ext && !base.toLowerCase().endsWith(ext)) return `${base}${ext}`;
+  return base;
+}
+
+function parseContentDispositionFilename(
+  disposition: string | null,
+): string | null {
+  if (!disposition) return null;
+  const utf8 = /filename\*\s*=\s*UTF-8''([^;]+)/i.exec(disposition);
+  if (utf8?.[1]) {
+    try {
+      return decodeURIComponent(utf8[1].trim().replace(/^"+|"+$/g, ""));
+    } catch {
+      // Fall through to basic filename=.
+    }
+  }
+  const basic = /filename\s*=\s*"([^"]+)"/i.exec(disposition);
+  if (basic?.[1]) return basic[1];
+  const unquoted = /filename\s*=\s*([^;]+)/i.exec(disposition);
+  if (unquoted?.[1]) return unquoted[1].trim().replace(/^"+|"+$/g, "");
+  return null;
+}
+
+export interface FetchDocumentContentOptions {
+  signal?: AbortSignal;
+  /** inline = content preview; attachment = save to disk (default). */
+  disposition?: "attachment" | "inline";
+}
+
+/**
+ * Authorized binary fetch through the API (no public R2 URL).
+ * Reads the body as ArrayBuffer so bytes are never decoded as text/JSON.
+ * Error responses raise ApiError and are never returned as a Blob to save.
+ */
+export async function fetchDocumentContentRequest(
+  token: string,
+  documentId: string,
+  options: FetchDocumentContentOptions = {},
+): Promise<DownloadResult> {
+  const base = getApiBaseUrl();
+  const disposition = options.disposition ?? "attachment";
+  const path = `/documents/${documentId}/download?disposition=${disposition}`;
+  let response: Response;
+  try {
+    response = await fetch(joinUrl(base, path), {
+      method: "GET",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        Accept: "*/*",
+      },
+      signal: options.signal,
+      cache: "no-store",
+    });
+  } catch (error) {
+    if (error instanceof DOMException && error.name === "AbortError") {
+      throw error;
+    }
+    throw new ApiError(
+      0,
+      "Unable to reach the TrustVault API. Check that the backend is running.",
+    );
+  }
+
+  if (!response.ok) {
+    const detail = await parseErrorDetail(response);
+    throw new ApiError(response.status, detail);
+  }
+
+  const contentTypeHeader = response.headers.get("content-type");
+  const contentType = contentTypeHeader
+    ? contentTypeHeader.split(";")[0]!.trim()
+    : null;
+  // Reject accidental JSON/HTML success bodies pretending to be files.
+  if (
+    contentType &&
+    (contentType.includes("application/json") ||
+      contentType.includes("text/html"))
+  ) {
+    throw new ApiError(
+      response.status,
+      "Unexpected non-file response from the TrustVault API.",
+    );
+  }
+
+  const buffer = await response.arrayBuffer();
+  const blob = new Blob([buffer], {
+    type: contentType || "application/octet-stream",
+  });
+
   return {
     blob,
-    filename,
-    contentType: response.headers.get("content-type"),
+    filename: parseContentDispositionFilename(
+      response.headers.get("content-disposition"),
+    ),
+    contentType,
   };
+}
+
+/** Authorized download — streams through the API (no public R2 URL). */
+export async function downloadDocumentRequest(
+  token: string,
+  documentId: string,
+  signal?: AbortSignal,
+): Promise<DownloadResult> {
+  return fetchDocumentContentRequest(token, documentId, {
+    signal,
+    disposition: "attachment",
+  });
+}
+
+/** Authorized inline content fetch (same bytes as download). */
+export async function previewDocumentRequest(
+  token: string,
+  documentId: string,
+  signal?: AbortSignal,
+): Promise<DownloadResult> {
+  return fetchDocumentContentRequest(token, documentId, {
+    signal,
+    disposition: "inline",
+  });
 }
 
 /** Generic login failure copy — matches backend non-enumeration policy. */
