@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 
+import { Providers } from "@/components/providers";
 import { SiteFooter } from "@/components/site-footer";
 import { SiteHeader } from "@/components/site-header";
 
@@ -31,11 +32,13 @@ export default function RootLayout({
         />
       </head>
       <body className="antialiased">
-        <div className="flex min-h-screen flex-col">
-          <SiteHeader />
-          <main className="flex flex-1 flex-col">{children}</main>
-          <SiteFooter />
-        </div>
+        <Providers>
+          <div className="flex min-h-screen flex-col">
+            <SiteHeader />
+            <main className="flex flex-1 flex-col">{children}</main>
+            <SiteFooter />
+          </div>
+        </Providers>
       </body>
     </html>
   );

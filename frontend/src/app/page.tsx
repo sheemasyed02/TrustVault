@@ -11,14 +11,13 @@ export default function HomePage() {
           TrustVault
         </h1>
         <p className="mt-4 max-w-md text-base leading-7 text-muted md:text-lg">
-          Share company documents with named access, backend-enforced
-          permissions, and a verifiable audit trail. This scaffold provides
-          the application shell only.
+          Sign in to access documents shared with named permissions. The server
+          decides every read, download, and share — not the browser.
         </p>
         <ul className="mt-8 space-y-3 text-sm leading-6 text-muted">
-          <li>Document access is decided on the server, not in the browser.</li>
-          <li>Private object storage and streamed downloads are planned next.</li>
-          <li>No demo users, fake documents, or working sign-in in this build.</li>
+          <li>Short-lived access tokens are kept in memory for this tab only.</li>
+          <li>Refreshing the page clears the session; sign in again to continue.</li>
+          <li>Role-based menus are guidance only; the API enforces access.</li>
         </ul>
       </section>
 

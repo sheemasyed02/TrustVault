@@ -22,7 +22,7 @@ class Settings(BaseSettings):
     app_env: str = Field(default="development", alias="APP_ENV")
     api_prefix: str = Field(default="/api/v1", alias="API_PREFIX")
     cors_origins: str = Field(
-        default="http://localhost:3000",
+        default="http://localhost:3000,http://127.0.0.1:3000",
         alias="CORS_ORIGINS",
     )
     database_url: str = Field(alias="DATABASE_URL")

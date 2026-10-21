@@ -8,6 +8,8 @@ import pytest
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from sqlalchemy import delete
+
 from app.cli.seed_demo_users import (
     DEMO_ACCOUNTS,
     SeedConflictError,
@@ -16,6 +18,14 @@ from app.cli.seed_demo_users import (
 from app.core.security import hash_password, verify_password
 from app.db.models import User
 from app.services.auth_service import normalize_email
+
+DEMO_EMAILS = [normalize_email(account.email) for account in DEMO_ACCOUNTS]
+
+
+def _clear_demo_users(session: Session) -> None:
+    """Remove demo emails inside the test transaction (rolled back afterward)."""
+    session.execute(delete(User).where(User.email.in_(DEMO_EMAILS)))
+    session.flush()
 
 
 @pytest.fixture()
@@ -34,6 +44,7 @@ def test_seed_creates_required_roles(
     db_session: Session,
     demo_passwords: dict[str, str],
 ):
+    _clear_demo_users(db_session)
     results = seed_demo_users(db_session)
     db_session.flush()
 
@@ -57,6 +68,7 @@ def test_seed_is_idempotent_and_does_not_reset_password_or_role(
     demo_passwords: dict[str, str],
     monkeypatch: pytest.MonkeyPatch,
 ):
+    _clear_demo_users(db_session)
     first = seed_demo_users(db_session)
     db_session.flush()
     assert set(first.values()) == {"created"}
@@ -87,6 +99,7 @@ def test_seed_conflict_on_unexpected_role(
     db_session: Session,
     demo_passwords: dict[str, str],
 ):
+    _clear_demo_users(db_session)
     db_session.add(
         User(
             name="Conflict",

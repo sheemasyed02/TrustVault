@@ -1,43 +1,96 @@
 # TrustVault — Permissions Model
 
-Status: **Planned**. No authorization is enforced in the current scaffold.
+Status: **Authorization service implemented**. Document **upload**, **list/search**, **metadata**, **download**, **grant/revoke**, **metadata PATCH**, and **owner soft-delete** are implemented.
 
-## Roles
+## Authentication vs authorization
 
-### ADMIN
+- **Authentication** (`get_current_user`): proves who the caller is (valid bearer token + active user in PostgreSQL).
+- **Authorization** (`app.services.document_authorization`): decides whether that user may perform a specific action on a specific document, using current database ownership and grants.
 
-- Manage registered user accounts (activate / deactivate).
-- View security audit events and permission-change history.
-- Run audit integrity verification.
-- Does **not** automatically receive READ/EDIT/download access to every confidential document.
+Token role claims and client-supplied owner/permission fields are never treated as authorization.
 
-### OWNER
+## Permission matrix
 
-- Upload and organize documents they own.
-- View, download, edit allowed metadata, and soft-delete their own documents.
-- Grant READ or EDIT to a named, registered user.
-- Revoke grants they control.
-- View the current permission list for their documents.
+| Principal | List / discover | Read metadata / download | Edit permitted metadata | Grant / revoke | Soft-delete |
+| --- | --- | --- | --- | --- | --- |
+| Document owner | Yes | Yes | Yes | Yes | Yes |
+| Active READ grant | Yes (that doc) | Yes | No | No | No |
+| Active EDIT grant | Yes (that doc) | Yes | Yes (title/category/description only) | No | No |
+| No active grant | No | No | No | No | No |
+| ADMIN without grant | No | No | No | No | No |
+| Inactive account | No | No | No | No | No |
 
-### VIEWER
+### Owner vs EDIT grantee (metadata)
 
-- Access only documents explicitly shared with them.
-- READ: view and download.
-- EDIT: view, download, and permitted metadata edits.
-- Cannot share or revoke another owner's permissions.
+- **Owner:** may PATCH `title`, `category`, `description`; may grant/revoke; may DELETE (soft-delete).
+- **EDIT grantee:** may PATCH the same three fields only. Cannot change `owner_id`, `storage_key`, size/checksum/MIME, deletion state, or permissions. Cannot DELETE or share.
 
-## Grant rules
+### Metadata PATCH
 
-- Ownership and access are determined from authenticated identity and database state.
-- Client-supplied roles, owner IDs, grantor IDs, object keys, or permission claims are never trusted.
-- Revocation must deny the next protected request.
-- Disabled accounts cannot perform protected actions.
+- Route: `PATCH /documents/{document_id}`
+- Service: `update_document_metadata` → `evaluate_document_access(EDIT_METADATA)` after `SELECT … FOR UPDATE`
+- Forbidden fields rejected via schema `extra=forbid` and `reject_protected_metadata_fields`
+- Revoked EDIT grant denied on the next PATCH (same JWT still valid)
 
-## Implementation status
+### Soft-delete
 
-| Control | Status |
-| --- | --- |
-| Login / access tokens | Not implemented |
-| Document grants | Not implemented |
-| Server-side authorization checks | Not implemented |
-| Admin user management | Not implemented |
+- Route: `DELETE /documents/{document_id}` — owner only (`require_document_delete`)
+- Sets `documents.deleted_at`; retains permission rows and audit history
+- Then deletes the private R2 object (server key only)
+- Soft-deleted documents are excluded from list and fail read/download/edit/share with **404**
+- Repeated DELETE → **404** (does not claim success)
+
+### Storage / DB consistency (delete)
+
+1. Authorize owner  
+2. Soft-delete in PostgreSQL (document immediately unservable)  
+3. Delete R2 object  
+4. Success only if R2 delete succeeds or object already absent  
+5. If R2 fails: keep soft-delete, return **503**, audit `STORAGE_DELETE_FAILED`  
+
+Residual: orphaned private R2 object until retry. No distributed transaction with R2.
+
+### Immediate revocation
+
+Every protected check reloads grant state from PostgreSQL. JWTs are not permission caches. No public/presigned download URLs.
+
+### Listing and search visibility
+
+`accessible_documents_query`: non-deleted AND (owner OR active READ/EDIT grant). ADMIN alone does not expand visibility.
+
+### Denial response policy
+
+- Missing / soft-deleted / no-access → **404** `"Document not found"`
+- Insufficient action (e.g. READ editing, EDIT deleting) → **403** `"Forbidden"`
+- Unauthenticated / inactive → **401**
+- Authz/query failure → **503**
+
+### Concurrency (edit vs revoke)
+
+Document (and non-owner grant) rows are locked with `FOR UPDATE`, then edit authorization is re-checked. A revoke committed before that check denies the edit. Under READ COMMITTED, a residual race between the final check and commit is **not** claimed as fully eliminated; tests cover revoke-then-edit on the same token.
+
+## Code entry points
+
+- `app.services.document_authorization.*`
+- `app.services.document_metadata.update_document_metadata`
+- `app.services.document_deletion.soft_delete_document`
+- `app.services.document_sharing.*`
+- `app.api.documents` (upload/list/get/patch/delete/download)
+- `app.api.document_permissions` (list/grant/revoke)
+
+## Audit
+
+Non-durable hooks (`persisted=false`) for upload, list, metadata read/update, download, delete, and permission changes. No ordinary API to edit or delete audit events. Durable hash-chain writer is not implemented.
+
+## Tests
+
+- `tests/test_document_authorization.py`
+- `tests/test_document_access.py`
+- `tests/test_document_sharing.py`
+- `tests/test_document_mutations.py` — PATCH/DELETE, R2 failure honesty, revoke-then-edit
+
+## Remaining gaps
+
+- Durable audit writer and integrity verification APIs
+- Automated orphan R2 cleanup worker after failed storage delete
+- Token logout/revocation

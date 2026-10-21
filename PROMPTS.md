@@ -195,3 +195,234 @@ pytest -v
 ```
 
 Actual result: **47 passed**
+
+---
+
+## Task 5: Centralized document authorization
+
+### Prompt summary
+
+Implement a reusable server-side document authorization layer with owner/READ/EDIT/ADMIN/inactive/revocation rules, FastAPI dependencies for future routes, tests, and documentation. No document upload/download endpoints.
+
+### Approach
+
+- Inspected existing User/Document/DocumentPermission models and get_current_user.
+- No schema migration required; active grants use revoked_at IS NULL.
+- Audit writer not present; added AuthorizationAuditHook / NullAuthorizationAuditHook (does not persist events).
+- Denial policy: 404 for inaccessible/missing/deleted documents; 403 for insufficient action; fail closed on DB errors.
+- Fixed seed tests to clear demo emails inside the rolled-back test transaction when local demo users already exist.
+
+### Files created or updated
+
+- backend/app/services/document_authorization.py
+- backend/app/api/document_deps.py
+- backend/tests/test_document_authorization.py
+- backend/tests/test_seed_demo_users.py (isolation fix)
+- PERMISSIONS.md, PROMPTS.md, THREATS.md
+
+### Verification
+
+`	ext
+cd backend
+pytest -v tests/test_document_authorization.py
+pytest -v
+`
+
+---
+
+## Task 6: Secure document upload
+
+### Prompt summary
+
+Implement POST /documents for OWNER uploads to private R2 with validation, PostgreSQL metadata, failure compensation, audit hook, tests, and docs. No list/download/sharing.
+
+### Approach
+
+- Added file validation (PDF/DOCX/PNG/JPEG, 10 MiB), upload orchestration, multipart route.
+- Order: authorize OWNER → validate → R2 put → DB insert; compensate with R2 delete on DB failure.
+- Durable audit writer still absent; RecordingUploadAuditHook/NullUploadAuditHook mark persisted=False.
+- Dependency python-multipart added.
+
+### Files created or updated
+
+- backend/app/services/file_validation.py, document_upload.py, upload_audit.py
+- backend/app/api/documents.py, schemas/documents.py, main.py
+- backend/tests/test_document_upload.py
+- backend/requirements.txt
+- API_DOCUMENTATION.md, PERMISSIONS.md, README.md, PROMPTS.md
+
+### Verification
+
+`	ext
+cd backend
+pytest -v tests/test_document_upload.py
+pytest -v
+`
+
+Upload suite: **26 passed**. Full suite: **100 passed**.
+
+---
+
+## Task 7: Authorized listing, metadata, and downloads
+
+### Prompt summary
+
+Implement `GET /documents` (paginated list/search with SQL access filtering), `GET /documents/{id}` (authorized metadata), and `GET /documents/{id}/download` (stream from private R2 after authz). Reuse Task 7 policy; mocked R2 tests; update API/PERMISSIONS/PROMPTS docs. No frontend.
+
+### Approach
+
+- Listing via `accessible_documents_query`: non-deleted + (owner OR active READ/EDIT grant); filters applied after visibility; max page size 100; stable `created_at DESC, id DESC`.
+- Metadata and download call `require_document_read` before private data or R2 access.
+- Download streams chunks through FastAPI `StreamingResponse`; no public/presigned URLs; sanitized attachment filename; `nosniff` + `Cache-Control: private, no-store`.
+- Audit via existing non-durable `UploadAuditHook` / `RecordingUploadAuditHook` (`persisted=false`). Durable audit writer still absent.
+
+### Files created or updated
+
+- `backend/app/services/document_listing.py`
+- `backend/app/services/document_download.py`
+- `backend/app/api/documents.py`
+- `backend/app/schemas/documents.py`
+- `backend/tests/test_document_access.py`
+- `backend/tests/test_document_authorization.py` (comment only)
+- `API_DOCUMENTATION.md`, `PERMISSIONS.md`, `PROMPTS.md`
+
+### Issues and fixes
+
+1. Storage error mocks needed constructors without unsupported `operation=` kwargs.
+2. Filename sanitization tightened to neutralize CR/LF/quotes and restrict to safe tokens.
+3. Owner-email filter uses a subquery (not a join) to avoid duplicate rows with `joinedload(Document.owner)`.
+
+### Verification
+
+```text
+cd backend
+.\.venv\Scripts\python.exe -m pytest -v tests/test_document_access.py
+.\.venv\Scripts\python.exe -m pytest -v
+```
+
+Access suite: **25 passed**. Full suite: **125 passed**, 0 failed, 0 skipped.
+
+---
+
+## Task 8: Document sharing, grants, and immediate revocation
+
+### Prompt summary
+
+Implement owner-only permission list/grant/revoke for READ/EDIT, enforce immediate revocation against existing metadata/download routes, automated tests, and documentation. No frontend.
+
+### Approach
+
+- Service `document_sharing.py` uses `require_document_owner`; active grants via `revoked_at IS NULL`.
+- Revoke sets `revoked_at`; regrant inserts a new row (never silently clears old `revoked_at`).
+- Duplicate active grants: pre-check + partial unique index / IntegrityError → 409 (savepoint).
+- Audit via extended `UploadAuditHook` (`target_user_id`); success-audit failure undoes grant/revoke and returns 503.
+- Same JWT used before/after revoke to prove access is not token-cached.
+
+### Files created or updated
+
+- `backend/app/services/document_sharing.py`
+- `backend/app/api/document_permissions.py`
+- `backend/app/schemas/documents.py`
+- `backend/app/services/upload_audit.py`
+- `backend/app/main.py`
+- `backend/tests/test_document_sharing.py`
+- `API_DOCUMENTATION.md`, `PERMISSIONS.md`, `PROMPTS.md`
+
+### Issues and fixes
+
+1. Full `session.rollback()` on audit failure would wipe the request/test transaction; changed to delete the unaudited grant / restore `revoked_at`.
+2. Permission routes share `get_document_audit` from `documents.py` so test overrides apply.
+
+### Verification
+
+```text
+cd backend
+.\.venv\Scripts\python.exe -m pytest -v tests/test_document_sharing.py
+.\.venv\Scripts\python.exe -m pytest -v
+```
+
+Sharing suite: **21 passed**. Full suite: **146 passed**, 0 failed, 0 skipped.
+
+---
+
+## Task 9: Secure metadata editing and document deletion
+
+### Prompt summary
+
+Implement `PATCH /documents/{id}` for title/category/description and owner-only `DELETE /documents/{id}` with soft-delete + R2 cleanup, authorization reuse, tests, and docs. No frontend.
+
+### Approach
+
+- Metadata: `update_document_metadata` with `FOR UPDATE`, re-check `EDIT_METADATA`, schema `extra=forbid`, reuse upload validators.
+- Delete: soft-delete first, then R2 `delete_object`; missing object → success `already_absent`; R2 failure → keep tombstone, **503**, no false complete success.
+- No-op PATCH audits `NO_CHANGES` with empty `changed_fields`.
+- Audit still non-durable (`persisted=false`).
+
+### Files created or updated
+
+- `backend/app/services/document_metadata.py`
+- `backend/app/services/document_deletion.py`
+- `backend/app/api/documents.py`, `schemas/documents.py`, `upload_audit.py`
+- `backend/tests/test_document_mutations.py`
+- `API_DOCUMENTATION.md`, `PERMISSIONS.md`, `THREATS.md`, `PROMPTS.md`
+
+### Issues and fixes
+
+1. Chose soft-delete-before-R2 so access stops even when storage cleanup fails.
+2. Concurrency: row locks + re-authz; full cross-session race not claimed as eliminated — tested revoke-then-edit same token.
+
+### Verification
+
+```text
+cd backend
+.\.venv\Scripts\python.exe -m pytest -v tests/test_document_mutations.py
+.\.venv\Scripts\python.exe -m pytest -v
+```
+
+Mutation suite: **24 passed**. Full suite: **170 passed**, 0 failed, 0 skipped.
+
+Note: full suite briefly hit Postgres `too many clients` until test engines used `NullPool` under pytest (`app/db/session.py`).
+
+---
+
+## Task 10: Connect Next.js auth to FastAPI
+
+### Prompt summary
+
+Wire the existing Next.js login UI to real `POST /auth/login` and `GET /users/me`, with in-memory JWT session, protected dashboard shell, role-aware nav, Vitest coverage, and production build. No document upload/dashboard screens.
+
+### Backend contract used
+
+- `POST /auth/login` — JSON `{ email, password }` → `{ access_token, token_type, expires_at, expires_in }`
+- `GET /users/me` — `Authorization: Bearer <token>` → safe user profile
+- CORS: allow frontend origins (example updated to include `localhost` and `127.0.0.1`)
+
+### Approach
+
+- Typed client in `frontend/src/lib/api.ts` (`NEXT_PUBLIC_API_BASE_URL`, no mocks).
+- `AuthProvider` stores access token + user in React memory only (refresh clears session).
+- Login form submits to real API; generic 401 copy; navigate to `/dashboard`.
+- `RequireAuth` guards `/dashboard`; role nav via `getNavItemsForRole` (UI only).
+- Logout clears memory; does not claim server JWT revocation.
+
+### Files created or updated
+
+- `frontend/src/lib/api.ts`, `nav.ts`, tests
+- `frontend/src/components/auth-provider.tsx`, `login-entry.tsx`, `require-auth.tsx`, `app-nav.tsx`, `site-header.tsx`, `providers.tsx`, …
+- `frontend/src/app/dashboard/*`, `layout.tsx`, `page.tsx`
+- `frontend/vitest.config.ts`, `vitest.setup.ts`, `package.json`
+- `frontend/.env.example`, `backend/.env.example`, `backend/app/core/config.py` (CORS defaults)
+- `PROMPTS.md`
+
+### Verification
+
+```text
+cd frontend
+npm test
+npm run lint
+npm run build
+```
+
+Vitest: **17 passed**. Lint: 0 errors (1 existing font warning). `next build`: succeeded (Next.js 16.4.2).
+
+Commit link: frontend login connected to backend

@@ -82,12 +82,302 @@ Loads the current user from PostgreSQL using the token `sub`. Rejects missing, i
 
 Never includes `password_hash`.
 
+### `POST /documents`
+
+Authenticated **OWNER** only. Uploads a file to private Cloudflare R2 and stores metadata in PostgreSQL.
+
+**Content type:** `multipart/form-data`
+
+| Field | Required | Notes |
+| --- | --- | --- |
+| `file` | Yes | PDF, DOCX, PNG, or JPEG; max **10 MiB** |
+| `title` | Yes | Trimmed; max 255 characters |
+| `category` | Yes | Trimmed; max 128 characters |
+| `description` | No | Trimmed; max 5000 characters |
+
+Not accepted as authoritative (ignored if sent): `owner_id`, `storage_key`, checksum, size, audit fields. Owner and opaque R2 key are always server-assigned.
+
+**Validation**
+
+- Empty files rejected (`400`).
+- Oversized files rejected (`413`).
+- Unsupported or mismatched type/extension/content rejected (`415`).
+- Extension and client MIME type are not trusted alone; magic bytes / DOCX ZIP structure are checked.
+- This is **not** malware scanning.
+
+**Response `201`**
+
+```json
+{
+  "id": "00000000-0000-0000-0000-000000000000",
+  "title": "Q3 Report",
+  "category": "Finance",
+  "description": "Optional notes",
+  "owner": {
+    "id": "00000000-0000-0000-0000-000000000001",
+    "name": "Sheema Owner",
+    "email": "sheema@trustvault.demo"
+  },
+  "mime_type": "application/pdf",
+  "file_size": 12345,
+  "sha256_checksum": "<hex>",
+  "created_at": "2026-10-21T12:00:00+00:00"
+}
+```
+
+Never returns `storage_key`, credentials, public URLs, or file bytes.
+
+**Typical errors**
+
+| Status | Meaning |
+| --- | --- |
+| 401 | Missing/invalid token or inactive user |
+| 403 | Authenticated but not OWNER (VIEWER/ADMIN) |
+| 413 | File larger than 10 MiB |
+| 415 | Unsupported or mismatched file type |
+| 422 | Invalid title/category/description |
+| 500 | Storage or database failure (no success record) |
+
+**Failure compensation:** validate → R2 put → DB insert. If DB insert fails after R2 put, the API attempts to delete the R2 object. Success is never returned if either required step fails. Residual risk: orphaned private R2 object if cleanup also fails.
+
+**Audit:** upload allow/deny events are emitted through an in-process hook. A durable audit hash-chain writer is **not** implemented yet; tests record that events are not persisted.
+
+### `GET /documents`
+
+Authenticated. Returns a paginated list of documents the caller may **discover**:
+
+- Owned by the authenticated user, or
+- Shared via an **active** READ or EDIT grant (`revoked_at IS NULL`)
+- Soft-deleted documents (`deleted_at` set) are excluded
+- **ADMIN role alone does not expand visibility**
+
+Access filtering is applied in the PostgreSQL query before results are returned. Filters never reveal inaccessible documents (including title search against private titles).
+
+| Query param | Notes |
+| --- | --- |
+| `title` | Case-insensitive substring search; max 200 characters |
+| `owner_id` | UUID; only intersects with already-visible documents |
+| `owner_email` | Normalized email; only intersects with already-visible documents |
+| `category` | Exact match; max 128 characters |
+| `created_from` / `created_to` | Inclusive ISO-8601 datetimes; `created_from` ≤ `created_to` |
+| `page` | ≥ 1 (default 1) |
+| `page_size` | 1–100 (default 20) |
+
+Stable order: `created_at DESC`, `id DESC`.
+
+**Response `200`**
+
+```json
+{
+  "results": [
+    {
+      "id": "00000000-0000-0000-0000-000000000000",
+      "title": "Q3 Report",
+      "category": "Finance",
+      "owner": {
+        "id": "00000000-0000-0000-0000-000000000001",
+        "name": "Sheema Owner",
+        "email": "sheema@trustvault.demo"
+      },
+      "mime_type": "application/pdf",
+      "file_size": 12345,
+      "created_at": "2026-10-21T12:00:00+00:00"
+    }
+  ],
+  "page": 1,
+  "page_size": 20,
+  "total": 1,
+  "total_pages": 1
+}
+```
+
+List items omit `description`, `storage_key`, checksum, and file bytes. Invalid filters/pagination → `422`.
+
+### `GET /documents/{document_id}`
+
+Authenticated. Returns safe metadata after centralized **read** authorization (`require_document_read`).
+
+Includes: title, category, description, owner summary, mime type, size, SHA-256 checksum, `created_at`, `updated_at`.
+
+Never returns `storage_key`, credentials, or file bytes.
+
+| Status | Meaning |
+| --- | --- |
+| 200 | Authorized metadata |
+| 401 | Missing/invalid token or inactive user |
+| 404 | Missing, soft-deleted, or inaccessible (enumeration-resistant) |
+| 503 | Authorization check failed (fail closed) |
+
+### `GET /documents/{document_id}/download`
+
+Authenticated. Streams file bytes from **private** Cloudflare R2 through the API after authorization.
+
+Required sequence: authenticate → load document → verify not deleted → check ownership or active READ/EDIT grant → open R2 object → stream chunks → close R2 body.
+
+Security:
+
+- No public URL and no presigned download URL
+- No redirect to R2
+- Caller cannot supply the object key (taken from PostgreSQL only)
+- R2 is not contacted before authorization succeeds
+- Chunked streaming; R2 body closed when finished (including generator close)
+- `Content-Type` from stored validated MIME type
+- `Content-Disposition: attachment; filename="…"` with sanitized filename (CR/LF/quotes neutralized)
+- `X-Content-Type-Options: nosniff`
+- `Cache-Control: private, no-store`
+- Immediate revocation: every request re-checks current grants
+
+| Status | Meaning |
+| --- | --- |
+| 200 | Authorized byte stream |
+| 401 | Missing/invalid token or inactive user |
+| 404 | Missing, soft-deleted, or inaccessible |
+| 503 | Storage missing-object / network failure (generic message; no keys/credentials) |
+
+**Audit (non-durable today):** list/metadata/download success, denial, and storage failure events are emitted via the same in-process hook used by upload (`persisted=false`). A durable audit hash-chain writer is not implemented yet.
+
+### `GET /documents/{document_id}/permissions`
+
+Authenticated **document owner** only (`require_document_owner`). Returns active grants (`revoked_at IS NULL`).
+
+**Response `200`**
+
+```json
+{
+  "document_id": "00000000-0000-0000-0000-000000000000",
+  "permissions": [
+    {
+      "id": "00000000-0000-0000-0000-000000000010",
+      "document_id": "00000000-0000-0000-0000-000000000000",
+      "user": {
+        "id": "00000000-0000-0000-0000-000000000002",
+        "name": "Viewer",
+        "email": "viewer@example.com"
+      },
+      "permission": "READ",
+      "granted_at": "2026-10-21T12:00:00+00:00",
+      "granted_by": {
+        "id": "00000000-0000-0000-0000-000000000001",
+        "name": "Owner",
+        "email": "owner@example.com"
+      },
+      "regranted": false
+    }
+  ]
+}
+```
+
+Never includes password hashes, tokens, or storage keys. READ/EDIT grantees and non-owners cannot enumerate grants (**403** if they have some document relationship, **404** if none).
+
+### `POST /documents/{document_id}/permissions`
+
+Authenticated **document owner** only. Creates an active READ or EDIT grant.
+
+**Request**
+
+```json
+{
+  "user_id": "EXISTING_USER_UUID",
+  "permission": "READ"
+}
+```
+
+Only `user_id` and `permission` are accepted (`extra=forbid`). `granted_by` is always the authenticated owner. `revoked_at` / ownership / audit fields are not accepted.
+
+| Status | Meaning |
+| --- | --- |
+| 201 | Grant created (`regranted: true` when a prior revoked grant existed for the same user) |
+| 400 | Cannot grant to owner; inactive target |
+| 401 | Unauthenticated / inactive actor |
+| 403 | Authenticated but not owner (e.g. EDIT grantee) |
+| 404 | Document inaccessible/missing, or target user not found |
+| 409 | Duplicate active grant (application check or unique index) |
+| 422 | Invalid permission value or unknown fields |
+| 503 | Persistence or audit failure (unaudited grant is removed) |
+
+**Regrant policy:** revocation sets `revoked_at` and keeps history. A later owner grant inserts a **new** row; it does not silently clear `revoked_at` on the old row. Success audit uses reason `REGRANTED` when applicable.
+
+### `DELETE /documents/{document_id}/permissions/{user_id}`
+
+Authenticated **document owner** only. Soft-revokes the active grant (`revoked_at = now()`). Does not physically delete the permission row.
+
+| Status | Meaning |
+| --- | --- |
+| 200 | Active grant revoked |
+| 403 | Authenticated but not owner (grantee cannot self-revoke here) |
+| 404 | Document inaccessible, or no active grant for that user (including already revoked) |
+| 503 | Persistence or audit failure (revocation is undone if audit fails) |
+
+**Immediate revocation:** the next `GET` metadata/download/list check queries PostgreSQL for `revoked_at IS NULL`. JWTs are not permission caches. Already-downloaded local copies are outside TrustVault control.
+
+**Sharing audit (non-durable):** `DOCUMENT_PERMISSION_LIST` / `_GRANT` / `_REVOKE` with SUCCESS or DENIED, optional `target_user_id`, `persisted=false`.
+
+### `PATCH /documents/{document_id}`
+
+Authenticated. Partial metadata update for the **document owner** or an **active EDIT** grantee (`require_document_edit` / `EDIT_METADATA`).
+
+**Request** (`extra=forbid` — unknown fields rejected)
+
+```json
+{
+  "title": "Updated title",
+  "category": "Legal",
+  "description": "Optional notes"
+}
+```
+
+Only fields present in the body are considered (`exclude_unset`). Allowed keys: `title`, `category`, `description`. Forbidden examples: `owner_id`, `storage_key`, `file_size`, `sha256_checksum`, `mime_type`, `deleted_at`, permission/audit fields.
+
+Validation mirrors upload rules (non-empty title/category when provided; length limits). Empty title/category → `422`.
+
+**Response `200`:** same safe shape as `GET /documents/{id}` (no `storage_key`).
+
+| Status | Meaning |
+| --- | --- |
+| 200 | Updated (or no-op when values unchanged) |
+| 401 | Unauthenticated / inactive |
+| 403 | Has document relationship but not edit rights (e.g. READ grant) |
+| 404 | Missing, soft-deleted, or inaccessible |
+| 422 | Invalid / forbidden fields |
+| 503 | Lock/persist or audit failure |
+
+**No-op policy:** if provided values match current metadata, response is still `200`; audit SUCCESS with `reason_code=NO_CHANGES` and `changed_fields=[]`. Successful edits audit field **names** only (not description contents).
+
+**Concurrency:** document row (and active grant row for non-owners) locked with `FOR UPDATE`, then edit authorization re-checked. A revoke committed before that check denies the PATCH. A residual race under READ COMMITTED between check and commit is documented in `PERMISSIONS.md` / `THREATS.md` and is not claimed as fully eliminated.
+
+### `DELETE /documents/{document_id}`
+
+Authenticated **document owner** only (`require_document_delete`). Soft-deletes the row (`deleted_at`), then deletes the private R2 object using the server-side `storage_key`.
+
+**Response `200`**
+
+```json
+{
+  "id": "00000000-0000-0000-0000-000000000000",
+  "deleted_at": "2026-10-21T12:00:00+00:00",
+  "storage_cleanup": "completed"
+}
+```
+
+`storage_cleanup` is `completed` or `already_absent` (idempotent if the object was already gone).
+
+| Status | Meaning |
+| --- | --- |
+| 200 | Soft-deleted and storage cleanup completed/absent |
+| 403 | Authenticated but not owner (READ/EDIT grantee) |
+| 404 | Missing, already deleted, or inaccessible (repeated DELETE → 404) |
+| 503 | DB soft-delete failed, **or** R2 cleanup failed after soft-delete |
+
+**Failure strategy:** soft-delete first (immediately unlistable/unreadable/undownloadable), then R2 delete. If R2 fails, the soft-delete **remains** and the API returns **503** (does not claim complete deletion). Residual risk: private orphaned R2 object until a retry. Permission and audit history rows are retained. No client-supplied storage key.
+
+**Mutation audit (non-durable):** `DOCUMENT_METADATA_UPDATE`, `DOCUMENT_DELETE` with SUCCESS / DENIED / FAILURE; `persisted=false`.
+
 ## Planned (not implemented)
 
-- Document upload, list, search, details, metadata update, soft-delete, download stream
-- Permissions: grant, revoke, list grants
 - Admin user management, audit listing/filtering, audit integrity verification
 - Token revocation / logout that invalidates issued JWTs
+- Durable audit persistence for document access, sharing, and mutation events
+- Automated retry worker for orphaned R2 objects after `STORAGE_DELETE_FAILED`
 
 All protected document and admin routes must enforce authorization on the server. Frontend route protection alone is not sufficient.
 
@@ -112,5 +402,6 @@ Validation failures return `422` with an `errors` array.
 | `JWT_AUDIENCE` | Expected token audience (default `trustvault-api`) |
 | `ACCESS_TOKEN_EXPIRE_MINUTES` | Access token lifetime (default `30`) |
 | `DEMO_ADMIN_PASSWORD` / `DEMO_OWNER_PASSWORD` / `DEMO_VIEWER_PASSWORD` | Dev-only seed passwords |
+| `R2_ACCOUNT_ID` / `R2_ACCESS_KEY_ID` / `R2_SECRET_ACCESS_KEY` / `R2_BUCKET_NAME` / `R2_ENDPOINT_URL` | Private R2 (required for real uploads) |
 
-Never put signing secrets in frontend `NEXT_PUBLIC_*` variables.
+Never put signing secrets or R2 credentials in frontend `NEXT_PUBLIC_*` variables.

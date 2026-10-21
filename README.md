@@ -19,10 +19,11 @@ Project rules: see [`AGENTS.md`](AGENTS.md).
 ## Current status
 
 - `frontend/` — landing/login shell only (not wired to real auth APIs yet).
-- `backend/` — `GET /health`, PostgreSQL schema, private R2 service, and secure auth:
+- `backend/` — `GET /health`, PostgreSQL schema, private R2 service, secure auth, document authorization service, and:
   - `POST /auth/login`
   - `GET /users/me`
-- Document CRUD, sharing, and document authorization APIs are not implemented yet.
+  - `POST /documents` (OWNER upload to private R2)
+- Document list/download/sharing/deletion APIs are not implemented yet.
 
 ## Quick start
 

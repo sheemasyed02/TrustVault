@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+import sys
 from collections.abc import Generator
 
 from sqlalchemy import create_engine, text
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session, sessionmaker
+from sqlalchemy.pool import NullPool
 
 from app.core.config import get_settings
 
@@ -18,10 +20,15 @@ def get_engine() -> Engine:
     global _engine, _SessionLocal
     if _engine is None:
         settings = get_settings()
-        _engine = create_engine(
-            settings.database_url,
-            pool_pre_ping=True,
-        )
+        # Pytest resets the engine often; NullPool avoids exhausting Postgres
+        # max_connections across a large suite.
+        engine_kwargs: dict = {"pool_pre_ping": True}
+        if "pytest" in sys.modules:
+            engine_kwargs["poolclass"] = NullPool
+        else:
+            engine_kwargs["pool_size"] = 5
+            engine_kwargs["max_overflow"] = 10
+        _engine = create_engine(settings.database_url, **engine_kwargs)
         _SessionLocal = sessionmaker(
             bind=_engine,
             autoflush=False,
