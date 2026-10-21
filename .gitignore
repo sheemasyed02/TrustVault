@@ -1,0 +1,52 @@
+# Secrets and local environment
+.env
+.env.*
+!.env.example
+**/.env
+**/.env.*
+!**/.env.example
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+env/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+.coverage.*
+htmlcov/
+
+# Node and Next.js
+node_modules/
+.next/
+out/
+dist/
+build/
+.vercel/
+*.tsbuildinfo
+next-env.d.ts
+coverage/
+npm-debug.log*
+yarn-debug.log*
+pnpm-debug.log*
+
+# Local files and IDE
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Local temporary uploads and test artifacts
+uploads/
+tmp/
+temp/
+*.log
+
+# Private credentials and keys
+*.pem
+*.key
+secrets/
+credentials/
