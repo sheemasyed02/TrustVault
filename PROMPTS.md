@@ -189,6 +189,45 @@ This is my working log. I used Cursor to help write code, but I gave the rules, 
 
 ---
 
+## Task 15 — Administrator dashboard UI (2026-10-21)
+
+**What I asked for:** Role-protected admin dashboard wired to real admin APIs — summary counts, audit log filters/pagination/verify, user activate/deactivate with confirmation, last-active-admin protection, no document content bypass.
+
+**What was built:**
+- Backend: `GET /admin/summary`; last-active-admin + self-deactivation policy; `try_append_audit_event_committed` for non-blocking inactive-access audit; tests in `test_admin_users.py`.
+- Frontend: `/admin`, `/admin/users`, `/admin/audit` with `RequireAdmin`; nav items for ADMIN only; API client helpers; Vitest coverage for nav, gate, users confirmation, audit verify/filters.
+
+**What needed correction:**
+1. Last-admin test failed against seed admins still active in the shared DB — deactivate other admins in-session before asserting.
+2. Deactivate-then-`/users/me` could deadlock on the audit advisory lock in the long test transaction — inactive-access audit now uses try-lock and never blocks the 401.
+
+**How I checked:** backend `pytest tests/test_admin_users.py` (+ related); frontend `npm test` / `npm run build` (see completion report).
+
+---
+
+## Task 14 — Durable audit hash chain + admin APIs (2026-10-21)
+
+**What I asked for:** Tamper-evident audit trail with ADMIN-only listing and integrity verification; record login/document/permission/admin actions; concurrency-safe appends; honest THREATS.md limits.
+
+**What was built:**
+- `app.services.audit_trail` — SHA-256 canonical hashing, `pg_advisory_xact_lock`, monotonic timestamps, verify/list helpers.
+- `DurableAuditHook` replaces null hooks on document routes; DENIED commits independently; SUCCESS fail-closed where required.
+- Admin routes: `GET/PATCH /admin/users`, `GET /admin/audit/events`, `GET /admin/audit/integrity`.
+- Migration `b2c3d4e5f6a7` drops audit FK constraints so denials can record unknown document/user IDs.
+- Docs: API_DOCUMENTATION, PERMISSIONS, THREATS, this entry.
+
+**What needed correction:**
+1. Concurrent appends with identical `created_at` broke verification order (UUIDv4 not insertion-ordered) — fixed with monotonic timestamps under the lock.
+2. Login SUCCESS + DENIED in one long test transaction deadlocked on the advisory lock — split tests; document the lock lifetime.
+3. Restored PERMISSIONS.md after an over-broad rewrite and patched only audit/admin sections.
+
+**How I checked:**
+- `alembic upgrade head` — applied `b2c3d4e5f6a7`
+- `pytest tests/test_audit_trail.py` — **14 passed**
+- `pytest tests/test_auth.py tests/test_audit_trail.py tests/test_document_mutations.py tests/test_document_sharing.py` — **73 passed**
+
+---
+
 ## Bugfix — upload vanished + R2 env loading (2026-10-21)
 
 **Symptoms:** Owner upload looked successful then the document disappeared; R2 seemed broken depending on how the API was started.
@@ -220,5 +259,7 @@ This is my working log. I used Cursor to help write code, but I gave the rules, 
 | 11 | Document dashboard | Real list API only; Shared With Me without inventing an endpoint; fixed build/lint |
 | 12 | Document lifecycle UI | Multipart upload; UUID grant (no user search); confirm delete/revoke |
 | 13 | Owner/EDIT content edit | Server `your_access`; READ view-only; PUT content |
+| 14 | Durable audit + admin APIs | Hash chain; advisory lock; ADMIN list/verify |
+| 15 | Admin dashboard UI | Real summary/users/audit; last-admin lockout guard |
 
 I still review diffs, run tests myself, and refuse fake “all green” claims when a run actually failed.

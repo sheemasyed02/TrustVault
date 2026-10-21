@@ -181,7 +181,7 @@ Never returns `storage_key`, credentials, public URLs, or file bytes.
 
 **Failure compensation:** validate → R2 put → DB insert. If DB insert fails after R2 put, the API attempts to delete the R2 object. Success is never returned if either required step fails. Residual risk: orphaned private R2 object if cleanup also fails.
 
-**Audit:** upload allow/deny events are emitted through an in-process hook. A durable audit hash-chain writer is **not** implemented yet; tests record that events are not persisted.
+**Audit:** upload allow/deny events are persisted to the `audit_events` hash chain (`DOCUMENT_UPLOAD`). SUCCESS events share the request transaction (fail-closed if the audit write fails). DENIED events use a separate committed session so a later request rollback does not erase the denial.
 
 ### `GET /documents`
 
@@ -281,7 +281,7 @@ Security:
 | 404 | Missing, soft-deleted, or inaccessible |
 | 503 | Storage missing-object / network failure (generic message; no keys/credentials) |
 
-**Audit (non-durable today):** list/metadata/download success, denial, and storage failure events are emitted via the same in-process hook used by upload (`persisted=false`). A durable audit hash-chain writer is not implemented yet.
+**Audit:** list/metadata/download success, denial, and storage failure events are written to the durable hash chain (`DOCUMENT_LIST`, `DOCUMENT_READ`, `DOCUMENT_DOWNLOAD`, storage failure reason codes).
 
 ### `GET /documents/{document_id}/permissions`
 
@@ -357,7 +357,7 @@ Authenticated **document owner** only. Soft-revokes the active grant (`revoked_a
 
 **Immediate revocation:** the next `GET` metadata/download/list check queries PostgreSQL for `revoked_at IS NULL`. JWTs are not permission caches. Already-downloaded local copies are outside TrustVault control.
 
-**Sharing audit (non-durable):** `DOCUMENT_PERMISSION_LIST` / `_GRANT` / `_REVOKE` with SUCCESS or DENIED, optional `target_user_id`, `persisted=false`.
+**Sharing audit:** `DOCUMENT_PERMISSION_LIST` / `DOCUMENT_PERMISSION_GRANT` / `DOCUMENT_PERMISSION_REVOKE` with SUCCESS or DENIED, optional `target_user_id`, persisted on the hash chain. Grant/revoke SUCCESS is fail-closed if audit cannot be written.
 
 ### `PUT /documents/{document_id}/content`
 
@@ -441,14 +441,94 @@ Authenticated **document owner** only (`require_document_delete`). Soft-deletes 
 
 **Failure strategy:** soft-delete first (immediately unlistable/unreadable/undownloadable), then R2 delete. If R2 fails, the soft-delete **remains** and the API returns **503** (does not claim complete deletion). Residual risk: private orphaned R2 object until a retry. Permission and audit history rows are retained. No client-supplied storage key.
 
-**Mutation audit (non-durable):** `DOCUMENT_METADATA_UPDATE`, `DOCUMENT_DELETE` with SUCCESS / DENIED / FAILURE; `persisted=false`.
+**Mutation audit:** `DOCUMENT_METADATA_UPDATE`, `DOCUMENT_CONTENT_UPDATE`, `DOCUMENT_DELETE` with SUCCESS / DENIED; persisted on the hash chain. Metadata/content/delete SUCCESS is fail-closed if audit cannot be written.
+
+### `GET /admin/summary`
+
+**ADMIN only.** Accurate aggregate counts for the admin dashboard (no invented statistics):
+
+```json
+{
+  "users_total": 12,
+  "users_active": 10,
+  "users_inactive": 2,
+  "audit_success_total": 40,
+  "audit_denied_total": 7
+}
+```
+
+### `GET /admin/users`
+
+**ADMIN only.** Paginated list of registered accounts (id, name, email, role, `is_active`, timestamps). Never returns password hashes. Does **not** grant document content access.
+
+| Query | Notes |
+| --- | --- |
+| `page`, `page_size` | Pagination (`page_size` max 100) |
+
+### `PATCH /admin/users/{user_id}`
+
+**ADMIN only.** Body `{ "is_active": true|false }` (`extra=forbid` — role elevation rejected). Audits `ADMIN_USER_STATUS_UPDATE`.
+
+Policy:
+
+- Cannot deactivate the **last active administrator**
+- Cannot deactivate **your own** account when other admins remain
+- Disabled users receive **401** on the next protected request (active status is loaded from PostgreSQL, not from the JWT)
+- Fail-closed if audit write fails after a status change
+
+### `GET /admin/audit/events`
+
+**ADMIN only.** Paginated audit events from PostgreSQL. Does not return secrets, tokens, or file bytes.
+
+| Query | Notes |
+| --- | --- |
+| `page`, `page_size` | Pagination |
+| `actor_id` | Filter by actor UUID |
+| `action` | Exact action name |
+| `document_id` | Filter by document UUID |
+| `outcome` | `SUCCESS` or `DENIED` |
+| `created_from`, `created_to` | Inclusive UTC range |
+
+**Response `200`:** `{ results, page, page_size, total, total_pages }` where each result includes `id`, `created_at`, `actor_id`, `action`, `document_id`, `target_user_id`, `outcome`, `reason_code`, `request_id`, `metadata`, `previous_hash`, `event_hash`.
+
+| Status | Meaning |
+| --- | --- |
+| 200 | Filtered page |
+| 401 | Unauthenticated / inactive |
+| 403 | Non-ADMIN |
+| 422 | Invalid `outcome` or pagination |
+
+### `GET /admin/audit/integrity`
+
+**ADMIN only.** Recalculates SHA-256 event hashes and checks `previous_hash` links in `(created_at, id)` order.
+
+**Response `200`:**
+
+```json
+{
+  "valid": true,
+  "event_count": 12,
+  "checked_count": 12,
+  "first_failure_index": null,
+  "first_failure_event_id": null,
+  "reason_code": null,
+  "detail": "Audit chain integrity verified"
+}
+```
+
+Empty chain returns `valid=true` with `reason_code=EMPTY_CHAIN`. There is **no** application endpoint to edit or delete audit history.
+
+**Hash-chain notes:** appends use `pg_advisory_xact_lock` plus a monotonic `created_at` under that lock. Truncating the *newest* events without leaving a broken link is not detectable without an external chain-head anchor. A DBA who can rewrite the table can forge a new valid-looking chain — see `THREATS.md`.
+
+## Auth login audit
+
+`POST /auth/login` records `LOGIN` SUCCESS (same request transaction; fail-closed) or DENIED (`INVALID_CREDENTIALS` / `INACTIVE_ACCOUNT`) in an independent commit. Metadata may include `email_domain` only — never passwords or tokens. Inactive bearer access attempts may record `AUTH_INACTIVE_ACCESS`.
 
 ## Planned (not implemented)
 
-- Admin user management, audit listing/filtering, audit integrity verification
 - Token revocation / logout that invalidates issued JWTs
-- Durable audit persistence for document access, sharing, and mutation events
 - Automated retry worker for orphaned R2 objects after `STORAGE_DELETE_FAILED`
+- External audit-chain anchoring / WORM storage
 
 All protected document and admin routes must enforce authorization on the server. Frontend route protection alone is not sufficient.
 

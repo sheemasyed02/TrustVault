@@ -3,6 +3,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from app.api.admin import router as admin_router
 from app.api.auth import router as auth_router
 from app.api.document_permissions import router as document_permissions_router
 from app.api.documents import router as documents_router
@@ -18,7 +19,8 @@ def create_app() -> FastAPI:
         title=settings.app_name,
         description=(
             "Secure document sharing API. "
-            "Upload, list, metadata get/patch, download, grant/revoke, and owner soft-delete."
+            "Upload, list, metadata get/patch, download, grant/revoke, owner soft-delete, "
+            "and administrator audit/user management."
         ),
         version="0.1.0",
     )
@@ -46,6 +48,7 @@ def create_app() -> FastAPI:
     app.include_router(users_router)
     app.include_router(documents_router)
     app.include_router(document_permissions_router)
+    app.include_router(admin_router)
 
     return app
 

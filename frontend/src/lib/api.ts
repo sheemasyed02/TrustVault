@@ -668,3 +668,142 @@ export async function previewDocumentRequest(
 
 /** Generic login failure copy — matches backend non-enumeration policy. */
 export const GENERIC_LOGIN_ERROR = "Invalid email or password";
+
+/* —— Administrator APIs (ADMIN role required server-side) —— */
+
+export interface AdminUserSummary {
+  id: string;
+  name: string;
+  email: string;
+  role: UserRole | string;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface AdminUserListResponse {
+  results: AdminUserSummary[];
+  page: number;
+  page_size: number;
+  total: number;
+  total_pages: number;
+}
+
+export interface AdminSummaryResponse {
+  users_total: number;
+  users_active: number;
+  users_inactive: number;
+  audit_success_total: number;
+  audit_denied_total: number;
+}
+
+export interface AuditEventItem {
+  id: string;
+  created_at: string;
+  actor_id: string | null;
+  action: string;
+  document_id: string | null;
+  target_user_id: string | null;
+  outcome: "SUCCESS" | "DENIED" | string;
+  reason_code: string | null;
+  request_id: string | null;
+  metadata: Record<string, unknown>;
+  previous_hash: string | null;
+  event_hash: string;
+}
+
+export interface AuditEventListResponse {
+  results: AuditEventItem[];
+  page: number;
+  page_size: number;
+  total: number;
+  total_pages: number;
+}
+
+export interface AuditListParams {
+  page?: number;
+  page_size?: number;
+  actor_id?: string;
+  action?: string;
+  document_id?: string;
+  outcome?: "SUCCESS" | "DENIED" | "";
+  created_from?: string;
+  created_to?: string;
+}
+
+export interface AuditIntegrityResult {
+  valid: boolean;
+  event_count: number;
+  checked_count: number;
+  first_failure_index: number | null;
+  first_failure_event_id: string | null;
+  reason_code: string | null;
+  detail: string;
+}
+
+export async function getAdminSummaryRequest(
+  token: string,
+  signal?: AbortSignal,
+): Promise<AdminSummaryResponse> {
+  return apiRequest<AdminSummaryResponse>("/admin/summary", { token, signal });
+}
+
+export async function listAdminUsersRequest(
+  token: string,
+  params: { page?: number; page_size?: number } = {},
+  signal?: AbortSignal,
+): Promise<AdminUserListResponse> {
+  const query = buildQuery({
+    page: params.page,
+    page_size: params.page_size,
+  });
+  return apiRequest<AdminUserListResponse>(`/admin/users${query}`, {
+    token,
+    signal,
+  });
+}
+
+export async function patchAdminUserStatusRequest(
+  token: string,
+  userId: string,
+  isActive: boolean,
+  signal?: AbortSignal,
+): Promise<AdminUserSummary> {
+  return apiRequest<AdminUserSummary>(`/admin/users/${userId}`, {
+    method: "PATCH",
+    token,
+    body: { is_active: isActive },
+    signal,
+  });
+}
+
+export async function listAuditEventsRequest(
+  token: string,
+  params: AuditListParams = {},
+  signal?: AbortSignal,
+): Promise<AuditEventListResponse> {
+  const query = buildQuery({
+    page: params.page,
+    page_size: params.page_size,
+    actor_id: params.actor_id,
+    action: params.action,
+    document_id: params.document_id,
+    outcome: params.outcome || undefined,
+    created_from: params.created_from,
+    created_to: params.created_to,
+  });
+  return apiRequest<AuditEventListResponse>(`/admin/audit/events${query}`, {
+    token,
+    signal,
+  });
+}
+
+export async function verifyAuditIntegrityRequest(
+  token: string,
+  signal?: AbortSignal,
+): Promise<AuditIntegrityResult> {
+  return apiRequest<AuditIntegrityResult>("/admin/audit/integrity", {
+    token,
+    signal,
+  });
+}

@@ -68,7 +68,7 @@ from app.services.document_metadata import (
 )
 from app.services.document_upload import DocumentUploadError, upload_document
 from app.services.file_validation import MAX_UPLOAD_BYTES
-from app.services.upload_audit import NullUploadAuditHook, UploadAuditHook
+from app.services.upload_audit import DurableAuditHook, UploadAuditHook
 from app.storage import R2StorageService, StorageError, get_storage_service
 
 logger = logging.getLogger(__name__)
@@ -83,13 +83,14 @@ def get_storage() -> R2StorageService:
     return get_storage_service()
 
 
-def get_upload_audit() -> UploadAuditHook:
-    return NullUploadAuditHook()
+def get_upload_audit(session: Session = Depends(get_db)) -> UploadAuditHook:
+    """Durable hash-chain writer bound to the request session for SUCCESS events."""
+    return DurableAuditHook(session)
 
 
-def get_document_audit() -> UploadAuditHook:
-    """Shared non-durable audit hook for list/metadata/download outcomes."""
-    return NullUploadAuditHook()
+def get_document_audit(session: Session = Depends(get_db)) -> UploadAuditHook:
+    """Durable hash-chain writer for list/metadata/download/delete outcomes."""
+    return DurableAuditHook(session)
 
 
 async def _read_upload_with_limit(upload: UploadFile) -> bytes:

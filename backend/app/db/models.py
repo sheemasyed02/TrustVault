@@ -1,6 +1,7 @@
 """TrustVault relational models.
 
-Document APIs and audit writers are not implemented here.
+Audit events are appended only through ``app.services.audit_trail``; normal
+application APIs must not update or delete historical audit rows.
 """
 
 from __future__ import annotations
@@ -224,20 +225,18 @@ class AuditEvent(Base):
         primary_key=True,
         default=uuid.uuid4,
     )
+    # No FKs: denial events may reference unknown/guessed document or user IDs.
     actor_id: Mapped[Optional[uuid.UUID]] = mapped_column(
         UUID(as_uuid=True),
-        ForeignKey("users.id", ondelete="SET NULL"),
         nullable=True,
     )
     action: Mapped[str] = mapped_column(String(128), nullable=False)
     document_id: Mapped[Optional[uuid.UUID]] = mapped_column(
         UUID(as_uuid=True),
-        ForeignKey("documents.id", ondelete="SET NULL"),
         nullable=True,
     )
     target_user_id: Mapped[Optional[uuid.UUID]] = mapped_column(
         UUID(as_uuid=True),
-        ForeignKey("users.id", ondelete="SET NULL"),
         nullable=True,
     )
     outcome: Mapped[str] = mapped_column(String(32), nullable=False)

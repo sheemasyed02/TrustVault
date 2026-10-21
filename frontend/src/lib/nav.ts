@@ -9,7 +9,6 @@ export interface NavItem {
 
 /**
  * Role-aware navigation for UI only. Backend authorization remains authoritative.
- * Admin management APIs are not exposed in the UI until those routes exist.
  */
 export function getNavItemsForRole(role: UserRole): NavItem[] {
   const common: NavItem[] = [
@@ -33,6 +32,11 @@ export function getNavItemsForRole(role: UserRole): NavItem[] {
     return common;
   }
 
-  // ADMIN — document screens may be empty without grants; no admin APIs in UI yet.
-  return common;
+  // ADMIN — overview + user management + audit (server still enforces ADMIN).
+  return [
+    ...common,
+    { label: "Admin", href: "/admin", available: true },
+    { label: "Users", href: "/admin/users", available: true },
+    { label: "Audit log", href: "/admin/audit", available: true },
+  ];
 }

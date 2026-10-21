@@ -11,7 +11,7 @@ I also say which tests cover the threat. If something is still weak, I say that 
 - Private document files in Cloudflare R2
 - Metadata and who can access what (Postgres)
 - Passwords and login tokens
-- Later: audit history (table exists; durable “hash chain writer” is **not** finished yet)
+- Audit history (durable hash chain in PostgreSQL; integrity verification for ADMIN)
 
 ---
 
@@ -141,22 +141,34 @@ I also say which tests cover the threat. If something is still weak, I say that 
 
 ---
 
-### 13. Audit trail is not solid yet
+### 13. Audit trail tampering / missing deny records
 
-**Worry:** We log allow/deny in hooks, but events are **not** durably written with a hash chain yet.
+**Worry:** Attackers (or bugs) alter audit rows, or a rolled-back request erases a denial event.
 
-**What we did:** Hooks exist; tests record `persisted=false`. No normal API to edit/delete audit rows. Full integrity verification is **future work**.
+**What we did:**
+- Durable writer (`audit_trail.append_audit_event`) stores SHA-256 `event_hash` over a canonical JSON payload plus `previous_hash`.
+- Appends take `pg_advisory_xact_lock` and enforce strictly increasing `created_at` so concurrent writers cannot fork the tip.
+- SUCCESS for sensitive ops shares the request transaction (**fail-closed** if audit cannot be written).
+- DENIED commits in a **separate session** so request rollback does not erase the denial.
+- `GET /admin/audit/events` + `GET /admin/audit/integrity` are ADMIN-only. No app API edits/deletes history.
+- Metadata sanitization drops passwords, tokens, secrets, and raw bytes.
 
-**Honest limit:** Do not claim tamper-proof audit today.
+**Tests:** `tests/test_audit_trail.py` — hash linkage, concurrent appends, field/hash/link tamper, reorder, empty chain, denial survival, non-admin 403, admin filters, login audit without secrets.
+
+**Honest limit (same-DB chain):**
+- Detectable: in-place field changes without re-hashing; broken `previous_hash` links; reordering that breaks link order; many mid-chain deletions that leave a gap.
+- **Not** reliably detectable without an external anchor: deleting the *newest* N events and leaving the remainder consistent; a privileged DBA rewriting the entire table into a new valid chain.
+- External anchoring / WORM storage is **future work**, not implemented. Do **not** call this cryptographically immutable.
 
 ---
 
 ## Limits I still accept
 
 - Someone who already downloaded a file can keep their **local copy**. We only control later server access.
-- A DBA with full Postgres access can change data; a same-DB hash chain would not stop that alone.
+- A DBA with full Postgres access can rewrite audit history into a new valid-looking chain; same-DB hashing only helps against partial/unskilled tampering.
 - Soft-delete + R2 delete can leave a private orphan object if cleanup fails.
 - JWT logout/revocation store is not built yet.
+- While a request transaction holds the advisory lock after a SUCCESS audit flush, an independent DENIED writer may wait briefly until that transaction commits (test fixtures that keep one transaction open across many calls must not interleave SUCCESS-held locks with independent DENIED commits carelessly).
 
 ---
 
@@ -173,6 +185,7 @@ I also say which tests cover the threat. If something is still weak, I say that 
 | ADMIN without grant | access + sharing tests |
 | Upload abuse / cleanup | `test_document_upload.py` |
 | Delete / R2 partial failure | `test_document_mutations.py` |
+| Audit hash chain / admin gate | `test_audit_trail.py` |
 | Token not in browser storage | frontend `auth-provider` Vitest |
 
 If a threat above says “still open,” we did **not** pretend the tests fully close it.

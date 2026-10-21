@@ -88,10 +88,29 @@ Document (and non-owner grant) rows are locked with `FOR UPDATE`, then edit auth
 - `app.api.documents` (upload/list/get/patch/delete/download)
 - `app.api.document_permissions` (list/grant/revoke)
 - `app.api.users` (`/me`, `/search`)
+- `app.api.admin` (user status + audit list/integrity)
+- `app.services.audit_trail` / `DurableAuditHook`
+
+## Admin (not document content)
+
+| Capability | Who | Notes |
+| --- | --- | --- |
+| `GET /admin/summary` | ADMIN | Accurate user + audit outcome counts |
+| List users / set `is_active` | ADMIN | Audited; no role mass-assignment |
+| List audit events / verify chain | ADMIN | Metadata only; no file bytes |
+| Read/download arbitrary documents | Nobody by role alone | Still requires ownership or grant |
+
+Account-status policy: cannot deactivate the last active administrator; cannot deactivate your own account when other admins remain; inactive users are rejected on the next protected request even with a valid JWT.
 
 ## Audit
 
-Non-durable hooks (`persisted=false`) for upload, list, metadata read/update, download, delete, and permission changes. No ordinary API to edit or delete audit events. Durable hash-chain writer is not implemented.
+Durable SHA-256 hash chain in `audit_events` (`app.services.audit_trail`):
+
+- Append under `pg_advisory_xact_lock` with monotonic `created_at` (concurrency-safe tip linking).
+- SUCCESS for sensitive mutations shares the request transaction (**fail-closed** if audit cannot be written for grant/revoke/metadata/content/delete/login success/admin status).
+- DENIED uses a **separate committed session** so rolling back the protected-operation transaction does not erase the denial. If that independent write fails, the denial HTTP response is still returned and the event is **not** claimed persisted.
+- No ordinary API can PATCH/DELETE historical audit rows.
+- Admin audit listing never grants document content permission.
 
 ## Tests
 
@@ -100,9 +119,10 @@ Non-durable hooks (`persisted=false`) for upload, list, metadata read/update, do
 - `tests/test_document_sharing.py`
 - `tests/test_document_mutations.py` — PATCH/DELETE, R2 failure honesty, revoke-then-edit
 - `tests/test_user_search.py` — auth, matching, inactive/self exclusion, pagination, sensitive fields
+- `tests/test_audit_trail.py` — hash/link/tamper/empty/concurrent/admin filters/non-admin denial
 
 ## Remaining gaps
 
-- Durable audit writer and integrity verification APIs
 - Automated orphan R2 cleanup worker after failed storage delete
 - Token logout/revocation
+- External chain-head anchoring (silent tail truncation / full DBA rewrite)

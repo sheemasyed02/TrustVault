@@ -20,9 +20,21 @@ describe("getNavItemsForRole", () => {
     expect(labels).toEqual(["Dashboard", "My Documents", "Shared with me"]);
   });
 
-  it("does not invent admin-only screens", () => {
-    const labels = getNavItemsForRole("ADMIN").map((item) => item.label);
-    expect(labels).not.toContain("Admin");
-    expect(labels).toContain("Dashboard");
+  it("shows admin screens only for ADMIN role", () => {
+    const adminLabels = getNavItemsForRole("ADMIN").map((item) => item.label);
+    expect(adminLabels).toEqual([
+      "Dashboard",
+      "My Documents",
+      "Shared with me",
+      "Admin",
+      "Users",
+      "Audit log",
+    ]);
+    expect(getNavItemsForRole("OWNER").map((i) => i.label)).not.toContain(
+      "Admin",
+    );
+    expect(getNavItemsForRole("VIEWER").map((i) => i.label)).not.toContain(
+      "Audit log",
+    );
   });
 });
