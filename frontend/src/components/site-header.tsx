@@ -2,7 +2,6 @@
 
 import Link from "next/link";
 
-import { AppNav } from "@/components/app-nav";
 import { useAuth } from "@/components/auth-provider";
 
 export function SiteHeader() {
@@ -10,7 +9,7 @@ export function SiteHeader() {
   const isAuthenticated = status === "authenticated";
 
   return (
-    <header className="flex flex-wrap items-center justify-between gap-4 border-b border-border/70 px-6 py-5 md:px-10">
+    <header className="flex flex-wrap items-center justify-between gap-4 border-b border-border/70 px-6 py-4 md:px-10">
       <div className="flex items-baseline gap-3">
         <Link
           href={isAuthenticated ? "/dashboard" : "/"}
@@ -22,11 +21,13 @@ export function SiteHeader() {
           Secure document sharing
         </p>
       </div>
-      {isAuthenticated ? (
-        <AppNav />
-      ) : (
+      {!isAuthenticated ? (
         <p className="rounded-md bg-accent-soft px-3 py-1 text-xs font-medium text-accent-strong">
           Sign in required
+        </p>
+      ) : (
+        <p className="text-xs text-muted md:text-sm">
+          Access is enforced by the API
         </p>
       )}
     </header>

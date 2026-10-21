@@ -89,6 +89,27 @@ describe("loginRequest", () => {
   });
 });
 
+describe("list and auth error handling", () => {
+  beforeEach(() => {
+    vi.stubGlobal("fetch", vi.fn());
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("surfaces list errors without returning fake documents", async () => {
+    const { listDocumentsRequest, ApiError } = await import("@/lib/api");
+    vi.mocked(fetch).mockResolvedValue(
+      new Response(JSON.stringify({ detail: "Not authenticated" }), {
+        status: 401,
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+    await expect(listDocumentsRequest("bad")).rejects.toBeInstanceOf(ApiError);
+  });
+});
+
 describe("getCurrentUserRequest", () => {
   beforeEach(() => {
     vi.stubGlobal("fetch", vi.fn());

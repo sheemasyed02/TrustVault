@@ -12,27 +12,27 @@ export interface NavItem {
  * Admin management APIs are not exposed in the UI until those routes exist.
  */
 export function getNavItemsForRole(role: UserRole): NavItem[] {
-  const dashboard: NavItem = {
-    label: "Dashboard",
-    href: "/dashboard",
-    available: true,
-  };
+  const common: NavItem[] = [
+    { label: "Dashboard", href: "/dashboard", available: true },
+    { label: "My Documents", href: "/documents", available: true },
+    { label: "Shared with me", href: "/shared", available: true },
+  ];
 
   if (role === "OWNER") {
     return [
-      dashboard,
-      { label: "My Documents", href: "/dashboard", available: false },
-      { label: "Upload", href: "/dashboard", available: false },
+      ...common,
+      {
+        label: "Upload",
+        href: "/documents/upload",
+        available: true,
+      },
     ];
   }
 
   if (role === "VIEWER") {
-    return [
-      dashboard,
-      { label: "Shared with me", href: "/dashboard", available: false },
-    ];
+    return common;
   }
 
-  // ADMIN — no admin audit/user-management screens exist yet.
-  return [dashboard];
+  // ADMIN — document screens may be empty without grants; no admin APIs in UI yet.
+  return common;
 }

@@ -22,6 +22,61 @@ export interface UserPublic {
   updated_at: string;
 }
 
+export interface DocumentOwnerSummary {
+  id: string;
+  name: string;
+  email: string;
+}
+
+export interface DocumentListItem {
+  id: string;
+  title: string;
+  category: string;
+  owner: DocumentOwnerSummary;
+  mime_type: string;
+  file_size: number;
+  created_at: string;
+}
+
+export interface DocumentListResponse {
+  results: DocumentListItem[];
+  page: number;
+  page_size: number;
+  total: number;
+  total_pages: number;
+}
+
+export interface DocumentDetail {
+  id: string;
+  title: string;
+  category: string;
+  description: string | null;
+  owner: DocumentOwnerSummary;
+  mime_type: string;
+  file_size: number;
+  sha256_checksum: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface DocumentDeleteResponse {
+  id: string;
+  deleted_at: string;
+  storage_cleanup: string;
+}
+
+/** Query params supported by GET /documents (server-side authorization). */
+export interface DocumentListParams {
+  title?: string;
+  owner_id?: string;
+  owner_email?: string;
+  category?: string;
+  created_from?: string;
+  created_to?: string;
+  page?: number;
+  page_size?: number;
+}
+
 export class ApiError extends Error {
   readonly status: number;
   readonly detail: string;
@@ -67,6 +122,16 @@ export function getApiBaseUrl(): string {
 function joinUrl(base: string, path: string): string {
   const normalizedPath = path.startsWith("/") ? path : `/${path}`;
   return `${base}${normalizedPath}`;
+}
+
+function buildQuery(params: Record<string, string | number | undefined>): string {
+  const qs = new URLSearchParams();
+  for (const [key, value] of Object.entries(params)) {
+    if (value === undefined || value === "") continue;
+    qs.set(key, String(value));
+  }
+  const text = qs.toString();
+  return text ? `?${text}` : "";
 }
 
 async function parseErrorDetail(response: Response): Promise<string> {
@@ -181,6 +246,106 @@ export async function getCurrentUserRequest(
     token,
     signal,
   });
+}
+
+export async function listDocumentsRequest(
+  token: string,
+  params: DocumentListParams = {},
+  signal?: AbortSignal,
+): Promise<DocumentListResponse> {
+  const query = buildQuery({
+    title: params.title,
+    owner_id: params.owner_id,
+    owner_email: params.owner_email,
+    category: params.category,
+    created_from: params.created_from,
+    created_to: params.created_to,
+    page: params.page,
+    page_size: params.page_size,
+  });
+  return apiRequest<DocumentListResponse>(`/documents${query}`, {
+    method: "GET",
+    token,
+    signal,
+  });
+}
+
+export async function getDocumentRequest(
+  token: string,
+  documentId: string,
+  signal?: AbortSignal,
+): Promise<DocumentDetail> {
+  return apiRequest<DocumentDetail>(`/documents/${documentId}`, {
+    method: "GET",
+    token,
+    signal,
+  });
+}
+
+export async function deleteDocumentRequest(
+  token: string,
+  documentId: string,
+  signal?: AbortSignal,
+): Promise<DocumentDeleteResponse> {
+  return apiRequest<DocumentDeleteResponse>(`/documents/${documentId}`, {
+    method: "DELETE",
+    token,
+    signal,
+  });
+}
+
+export interface DownloadResult {
+  blob: Blob;
+  filename: string | null;
+  contentType: string | null;
+}
+
+/** Authorized download — streams through the API (no public R2 URL). */
+export async function downloadDocumentRequest(
+  token: string,
+  documentId: string,
+  signal?: AbortSignal,
+): Promise<DownloadResult> {
+  const base = getApiBaseUrl();
+  let response: Response;
+  try {
+    response = await fetch(joinUrl(base, `/documents/${documentId}/download`), {
+      method: "GET",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        Accept: "*/*",
+      },
+      signal,
+      cache: "no-store",
+    });
+  } catch (error) {
+    if (error instanceof DOMException && error.name === "AbortError") {
+      throw error;
+    }
+    throw new ApiError(
+      0,
+      "Unable to reach the TrustVault API. Check that the backend is running.",
+    );
+  }
+
+  if (!response.ok) {
+    const detail = await parseErrorDetail(response);
+    throw new ApiError(response.status, detail);
+  }
+
+  const disposition = response.headers.get("content-disposition");
+  let filename: string | null = null;
+  if (disposition) {
+    const match = /filename="([^"]+)"/i.exec(disposition);
+    if (match?.[1]) filename = match[1];
+  }
+
+  const blob = await response.blob();
+  return {
+    blob,
+    filename,
+    contentType: response.headers.get("content-type"),
+  };
 }
 
 /** Generic login failure copy — matches backend non-enumeration policy. */
