@@ -74,14 +74,9 @@ export function ConfirmDialog({
             {cancelLabel}
           </Button>
           <Button
-            variant={danger ? "danger" : "primary"}
+            variant={danger ? "dangerSolid" : "primary"}
             disabled={busy}
             onClick={onConfirm}
-            className={
-              danger
-                ? "border-transparent bg-danger text-white hover:bg-danger/90"
-                : undefined
-            }
           >
             {busy ? "Working…" : confirmLabel}
           </Button>

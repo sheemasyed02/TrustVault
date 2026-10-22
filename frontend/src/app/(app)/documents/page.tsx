@@ -16,6 +16,7 @@ import {
   DocumentTableSkeleton,
   PaginationBar,
 } from "@/components/document-table";
+import { buttonClassName } from "@/components/ui/button";
 import { useDocumentActions } from "@/hooks/use-document-actions";
 import { useDocumentList } from "@/hooks/use-document-list";
 import { getPostLoginPath } from "@/lib/nav";
@@ -66,8 +67,8 @@ export default function MyDocumentsPage() {
 
   return (
     <div className="space-y-5">
-      <header className="flex flex-wrap items-end justify-between gap-3">
-        <div>
+      <header className="flex flex-wrap items-center justify-between gap-3">
+        <div className="min-w-0 max-w-2xl">
           <p className="text-xs font-semibold uppercase tracking-[0.16em] text-accent-strong">
             My Documents
           </p>
@@ -81,7 +82,10 @@ export default function MyDocumentsPage() {
         {user.role === "OWNER" ? (
           <Link
             href="/documents/upload"
-            className="inline-flex rounded-md bg-accent px-3.5 py-2 text-sm font-semibold text-white hover:bg-accent-strong"
+            className={buttonClassName({
+              variant: "primary",
+              className: "shrink-0 self-center",
+            })}
           >
             Upload
           </Link>

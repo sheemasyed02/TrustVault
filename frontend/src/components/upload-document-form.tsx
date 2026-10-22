@@ -3,7 +3,10 @@
 import { useRouter } from "next/navigation";
 import { useState, type FormEvent } from "react";
 
+import Link from "next/link";
+
 import { useAuth, useHandleUnauthorized } from "@/components/auth-provider";
+import { Button, buttonClassName } from "@/components/ui/button";
 import { ApiError, uploadDocumentRequest } from "@/lib/api";
 import { formatBytes } from "@/lib/format";
 import {
@@ -146,13 +149,22 @@ export function UploadDocumentForm() {
         </p>
       ) : null}
 
-      <button
-        type="submit"
-        disabled={submitting}
-        className="rounded-md bg-accent px-4 py-2 text-sm font-semibold text-white hover:bg-accent-strong disabled:opacity-60"
-      >
-        {submitting ? "Uploading…" : "Upload document"}
-      </button>
+      <div className="flex flex-wrap items-center gap-2 pt-1">
+        <Button type="submit" variant="primary" disabled={submitting}>
+          {submitting ? "Uploading…" : "Upload document"}
+        </Button>
+        <Link
+          href="/documents"
+          className={buttonClassName({
+            variant: "secondary",
+            className: submitting ? "pointer-events-none opacity-60" : "",
+          })}
+          aria-disabled={submitting}
+          tabIndex={submitting ? -1 : undefined}
+        >
+          Cancel
+        </Link>
+      </div>
     </form>
   );
 }

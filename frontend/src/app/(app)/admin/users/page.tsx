@@ -5,6 +5,7 @@ import { useCallback, useEffect, useState, type FormEvent } from "react";
 
 import { useAuth, useHandleUnauthorized } from "@/components/auth-provider";
 import { ConfirmDialog } from "@/components/confirm-dialog";
+import { buttonClassName } from "@/components/ui/button";
 import {
   ApiError,
   listAdminUsersRequest,
@@ -360,7 +361,10 @@ export default function AdminUsersPage() {
                       <div className="flex flex-wrap gap-2">
                         <Link
                           href={`/admin/users/${row.id}`}
-                          className="rounded-md bg-accent px-3 py-1.5 text-xs font-semibold text-white hover:bg-accent-strong"
+                          className={buttonClassName({
+                            variant: "primary",
+                            size: "sm",
+                          })}
                         >
                           View profile
                         </Link>

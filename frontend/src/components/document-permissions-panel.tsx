@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState, type FormEvent } from "react";
 
 import { useAuth, useHandleUnauthorized } from "@/components/auth-provider";
 import { ConfirmDialog } from "@/components/confirm-dialog";
+import { Button } from "@/components/ui/button";
 import { UserSearchPicker } from "@/components/user-search-picker";
 import {
   ApiError,
@@ -205,43 +206,42 @@ export function DocumentPermissionsPanel({
 
       <form
         onSubmit={(event) => void onGrant(event)}
-        className="mt-4 grid gap-3 sm:grid-cols-[1fr_auto_auto]"
+        className="mt-4 space-y-3"
       >
-        <div className="sm:col-span-1">
-          <UserSearchPicker
-            selected={selectedUser}
-            onSelect={setSelectedUser}
-            disabled={granting}
-            excludeUserIds={ownerUserId ? [ownerUserId] : []}
-          />
-        </div>
-        <label className="block text-sm">
-          <span className="mb-1 block font-medium">Permission</span>
-          <select
-            value={permission}
-            onChange={(event) =>
-              setPermission(event.target.value as DocumentPermissionLevel)
-            }
-            disabled={granting}
-            className="w-full rounded-md border border-border bg-white px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-accent/40 disabled:opacity-60"
-          >
-            <option value="READ">READ</option>
-            <option value="EDIT">EDIT</option>
-          </select>
-        </label>
-        <div className="flex items-end">
-          <button
+        <UserSearchPicker
+          selected={selectedUser}
+          onSelect={setSelectedUser}
+          disabled={granting}
+          excludeUserIds={ownerUserId ? [ownerUserId] : []}
+        />
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
+          <label className="block min-w-0 flex-1 text-sm sm:max-w-[12rem]">
+            <span className="mb-1 block font-medium">Permission</span>
+            <select
+              value={permission}
+              onChange={(event) =>
+                setPermission(event.target.value as DocumentPermissionLevel)
+              }
+              disabled={granting}
+              className="tv-input disabled:opacity-60"
+            >
+              <option value="READ">READ</option>
+              <option value="EDIT">EDIT</option>
+            </select>
+          </label>
+          <Button
             type="submit"
+            variant="primary"
             disabled={granting || !selectedUser}
             title={
               !selectedUser
                 ? "Select a recipient from search results first"
                 : undefined
             }
-            className="w-full rounded-md bg-accent px-4 py-2 text-sm font-semibold text-white hover:bg-accent-strong disabled:cursor-not-allowed disabled:opacity-60"
+            className="w-full sm:w-auto"
           >
             {granting ? "Granting…" : "Grant access"}
-          </button>
+          </Button>
         </div>
       </form>
 
@@ -307,23 +307,25 @@ export function DocumentPermissionsPanel({
                     {grant.regranted ? " · regranted" : ""}
                   </p>
                 </div>
-                <div className="flex flex-wrap gap-2">
-                  <button
+                <div className="flex shrink-0 flex-wrap items-center gap-2">
+                  <Button
                     type="button"
+                    size="sm"
+                    variant="secondary"
                     disabled={changing || revoking}
                     onClick={() => void changePermission(grant, nextLevel)}
-                    className="rounded-md border border-border px-3 py-1.5 text-xs font-semibold hover:bg-accent-soft disabled:cursor-not-allowed disabled:opacity-60"
                   >
                     {changing ? "Updating…" : `Change to ${nextLevel}`}
-                  </button>
-                  <button
+                  </Button>
+                  <Button
                     type="button"
+                    size="sm"
+                    variant="danger"
                     disabled={changing || revoking}
                     onClick={() => setRevokeTarget(grant)}
-                    className="rounded-md border border-danger/40 px-3 py-1.5 text-xs font-semibold text-danger disabled:cursor-not-allowed disabled:opacity-60"
                   >
                     Revoke
-                  </button>
+                  </Button>
                 </div>
               </li>
             );

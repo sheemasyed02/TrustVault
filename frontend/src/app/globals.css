@@ -44,9 +44,16 @@ body {
   font-family: var(--font-sans);
 }
 
-a {
-  color: inherit;
-  text-decoration: none;
+/*
+  Keep link defaults in @layer base so Tailwind utilities (e.g. text-white on
+  green CTA Links) win. Unlayered `a { color: inherit }` overrode text-white
+  and made primary Link buttons unreadable.
+*/
+@layer base {
+  a {
+    color: inherit;
+    text-decoration: none;
+  }
 }
 
 ::selection {

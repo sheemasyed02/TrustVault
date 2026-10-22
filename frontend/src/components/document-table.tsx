@@ -3,7 +3,7 @@
 import Link from "next/link";
 
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
+import { Button, buttonClassName } from "@/components/ui/button";
 import type { DocumentAccessLevel, DocumentListItem, UserPublic } from "@/lib/api";
 import { formatDocumentAccessLabel } from "@/lib/document-access";
 import { formatBytes, formatDateTime, mimeLabel } from "@/lib/format";
@@ -100,11 +100,14 @@ export function DocumentTable({
                     ) : null}
                   </td>
                 ) : null}
-                <td>
-                  <div className="flex flex-wrap gap-1.5">
+                <td className="whitespace-nowrap">
+                  <div className="flex flex-wrap items-center gap-1.5">
                     <Link
                       href={`/documents/${doc.id}`}
-                      className="inline-flex items-center justify-center rounded-md border border-border bg-white px-2.5 py-1.5 text-xs font-semibold hover:bg-accent-soft focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+                      className={buttonClassName({
+                        variant: "secondary",
+                        size: "sm",
+                      })}
                     >
                       Open
                     </Link>

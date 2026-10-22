@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 
 import { useAuth, useHandleUnauthorized } from "@/components/auth-provider";
 import { Alert } from "@/components/ui/alert";
+import { buttonClassName } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
 import { PageHeader } from "@/components/ui/page-header";
 import { Panel } from "@/components/ui/panel";
@@ -136,14 +137,14 @@ export default function DashboardPage() {
           isOwner ? (
             <Link
               href="/documents/upload"
-              className="inline-flex items-center justify-center rounded-md bg-accent px-3.5 py-2 text-sm font-semibold text-white hover:bg-accent-strong focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+              className={buttonClassName({ variant: "primary" })}
             >
               Upload document
             </Link>
           ) : (
             <Link
               href="/shared"
-              className="inline-flex items-center justify-center rounded-md bg-accent px-3.5 py-2 text-sm font-semibold text-white hover:bg-accent-strong focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+              className={buttonClassName({ variant: "primary" })}
             >
               Shared documents
             </Link>
@@ -202,7 +203,7 @@ export default function DashboardPage() {
                 isOwner ? (
                   <Link
                     href="/documents/upload"
-                    className="inline-flex items-center justify-center rounded-md bg-accent px-3.5 py-2 text-sm font-semibold text-white hover:bg-accent-strong"
+                    className={buttonClassName({ variant: "primary" })}
                   >
                     Upload
                   </Link>
