@@ -66,25 +66,29 @@ export default function MyDocumentsPage() {
 
   return (
     <div className="space-y-5">
-      <header>
-        <p className="text-sm font-semibold uppercase tracking-[0.18em] text-accent-strong">
-          My Documents
-        </p>
-        <h1 className="mt-2 font-display text-3xl tracking-tight">
-          Documents you own
-        </h1>
-        <p className="mt-2 max-w-2xl text-sm text-muted">
-          Loaded with <code className="text-xs">owner_id</code> set to your user
-          id so the API returns only your owned documents (still authorization-checked
-          server-side).
-        </p>
+      <header className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-accent-strong">
+            My Documents
+          </p>
+          <h1 className="mt-1.5 font-display text-2xl tracking-tight sm:text-3xl">
+            Documents you own
+          </h1>
+          <p className="mt-2 max-w-xl text-sm text-muted">
+            Search and open files you uploaded. Share access from each document.
+          </p>
+        </div>
+        {user.role === "OWNER" ? (
+          <Link
+            href="/documents/upload"
+            className="inline-flex rounded-md bg-accent px-3.5 py-2 text-sm font-semibold text-white hover:bg-accent-strong"
+          >
+            Upload
+          </Link>
+        ) : null}
       </header>
 
-      <DocumentFilters
-        value={filters}
-        onChange={setFilters}
-        showOwnerHint="Owner filter is fixed to your account for this page."
-      />
+      <DocumentFilters value={filters} onChange={setFilters} />
 
       {actions.actionError ? (
         <p role="alert" className="text-sm text-danger">
@@ -118,17 +122,17 @@ export default function MyDocumentsPage() {
       ) : null}
 
       {list.status === "empty" ? (
-        <div className="rounded-xl border border-dashed border-border bg-surface px-6 py-10 text-center">
-          <p className="font-medium text-foreground">No owned documents found</p>
+        <div className="rounded-xl border border-dashed border-border bg-surface px-6 py-10 text-center shadow-[var(--shadow-sm)]">
+          <p className="font-medium text-foreground">No documents yet</p>
           <p className="mt-2 text-sm text-muted">
-            Upload a file to create your first document.
+            Upload a DOCX file to create your first document.
           </p>
           {user.role === "OWNER" ? (
             <Link
               href="/documents/upload"
-              className="mt-4 inline-block text-sm font-semibold text-accent-strong"
+              className="mt-4 inline-block text-sm font-semibold text-accent-strong hover:underline"
             >
-              Go to upload
+              Upload a document
             </Link>
           ) : null}
         </div>

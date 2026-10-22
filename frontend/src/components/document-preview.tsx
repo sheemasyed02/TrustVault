@@ -136,9 +136,7 @@ export function DocumentPreview({
       });
       onDocumentUpdated?.(updated);
       setDirty(false);
-      setMessage(
-        "Document content saved. Body text is stored in the DOCX; complex body formatting (tables/images in the body) may be simplified. Styles and other package parts are kept when possible. Download PDF uses the latest saved DOCX.",
-      );
+      setMessage("Content saved. Download PDF uses the latest saved DOCX.");
     } catch (err) {
       if (handleUnauthorized(err)) return;
       setError(
@@ -175,16 +173,10 @@ export function DocumentPreview({
           </h2>
           <p className="mt-1 text-sm text-muted">
             {isPdf
-              ? "This is a legacy PDF. New uploads must be DOCX. In-app content editing is not available for PDFs."
+              ? "Legacy PDF — in-app editing is not available."
               : canEditDocx
-                ? "Edit the document body below and save. Metadata (title, category, description) is edited separately by the owner only. PDF download converts the latest saved DOCX."
-                : "Read-only view. Request EDIT from the owner to change DOCX contents. You can still download a PDF if you have access."}
-          </p>
-          <p className="mt-1 text-xs text-muted">
-            Format: {isPdf ? "PDF (legacy)" : "DOCX"}
-            {document.original_filename
-              ? ` · Original file: ${document.original_filename}`
-              : null}
+                ? "Edit the body below, then save. PDF export uses the latest saved file."
+                : "Read-only preview."}
           </p>
         </div>
         {canEditDocx ? (

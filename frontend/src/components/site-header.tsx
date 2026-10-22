@@ -25,11 +25,7 @@ export function SiteHeader() {
         <p className="rounded-md bg-accent-soft px-3 py-1 text-xs font-medium text-accent-strong">
           Sign in required
         </p>
-      ) : (
-        <p className="text-xs text-muted md:text-sm">
-          Access is enforced by the API
-        </p>
-      )}
+      ) : null}
     </header>
   );
 }

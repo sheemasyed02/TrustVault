@@ -18,6 +18,11 @@ class AuditEventResponse(BaseModel):
     actor_email: str | None = None
     action: str
     document_id: UUID | None = None
+    document_title: str | None = None
+    document_owner_id: UUID | None = None
+    document_owner_name: str | None = None
+    document_owner_email: str | None = None
+    is_owner_self_view: bool = False
     target_user_id: UUID | None = None
     target_user_name: str | None = None
     target_user_email: str | None = None
@@ -30,11 +35,19 @@ class AuditEventResponse(BaseModel):
 
 
 class DocumentAuditSummary(BaseModel):
-    """Counts for one document. Views mean authorised preview requests, not reading proof."""
+    """Counts for one document. Views mean authorised preview requests, not reading proof.
+
+    ``successful_views`` / ``distinct_viewers`` include every SUCCESS DOCUMENT_VIEW.
+    ``external_*`` fields exclude the document owner's own preview events.
+    """
 
     successful_views: int = 0
     distinct_viewers: int = 0
     latest_view_at: datetime | None = None
+    external_views: int = 0
+    distinct_external_viewers: int = 0
+    latest_external_view_at: datetime | None = None
+    owner_self_views: int = 0
     successful_downloads: int = 0
     denied_access_attempts: int = 0
     permission_grants: int = 0

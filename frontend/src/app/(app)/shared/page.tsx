@@ -49,16 +49,15 @@ export default function SharedWithMePage() {
   return (
     <div className="space-y-5">
       <header>
-        <p className="text-sm font-semibold uppercase tracking-[0.18em] text-accent-strong">
-          Shared with me
+        <p className="text-xs font-semibold uppercase tracking-[0.16em] text-accent-strong">
+          Shared documents
         </p>
-        <h1 className="mt-2 font-display text-3xl tracking-tight">
-          Documents shared with your account
+        <h1 className="mt-1.5 font-display text-2xl tracking-tight sm:text-3xl">
+          Shared with you
         </h1>
-        <p className="mt-2 max-w-2xl text-sm text-muted">
-          Only documents with an active READ or EDIT grant appear here. Access
-          badges come from the server. After a grant is revoked, refresh or open
-          the document again — the next API request is denied.
+        <p className="mt-2 max-w-xl text-sm text-muted">
+          Documents others have granted you access to. Your access level is shown
+          on each row.
         </p>
       </header>
 

@@ -473,6 +473,7 @@ def _apply_audit_filters(
     stmt: Select[tuple[AuditEvent]],
     *,
     actor_id: uuid.UUID | None,
+    exclude_actor_id: uuid.UUID | None,
     action: str | None,
     document_id: uuid.UUID | None,
     owner_id: uuid.UUID | None,
@@ -480,8 +481,17 @@ def _apply_audit_filters(
     created_from: datetime | None,
     created_to: datetime | None,
 ) -> Select[tuple[AuditEvent]]:
+    from sqlalchemy import or_
+
     if actor_id is not None:
         stmt = stmt.where(AuditEvent.actor_id == actor_id)
+    if exclude_actor_id is not None:
+        stmt = stmt.where(
+            or_(
+                AuditEvent.actor_id.is_(None),
+                AuditEvent.actor_id != exclude_actor_id,
+            )
+        )
     if action is not None:
         stmt = stmt.where(AuditEvent.action == action)
     if document_id is not None:
@@ -507,6 +517,7 @@ def list_audit_events(
     page: int = 1,
     page_size: int = 50,
     actor_id: uuid.UUID | None = None,
+    exclude_actor_id: uuid.UUID | None = None,
     action: str | None = None,
     document_id: uuid.UUID | None = None,
     owner_id: uuid.UUID | None = None,
@@ -525,6 +536,7 @@ def list_audit_events(
     base = _apply_audit_filters(
         base,
         actor_id=actor_id,
+        exclude_actor_id=exclude_actor_id,
         action=action,
         document_id=document_id,
         owner_id=owner_id,
@@ -575,15 +587,49 @@ def summarize_document_audit(
     session: Session,
     *,
     document_id: uuid.UUID,
+    owner_id: uuid.UUID | None = None,
 ) -> DocumentAuditSummary:
     """Aggregate counts for the owner document activity dashboard."""
     from app.services.document_view_audit import document_view_stats
 
     views, distinct, latest = document_view_stats(session, document_id=document_id)
+    resolved_owner_id = owner_id
+    if resolved_owner_id is None:
+        doc = session.get(Document, document_id)
+        resolved_owner_id = doc.owner_id if doc is not None else None
+
+    external_views = 0
+    external_distinct = 0
+    external_latest = None
+    owner_self_views = 0
+    if resolved_owner_id is not None:
+        external_views, external_distinct, external_latest = document_view_stats(
+            session,
+            document_id=document_id,
+            exclude_actor_id=resolved_owner_id,
+        )
+        owner_self_views = (
+            session.scalar(
+                select(func.count())
+                .select_from(AuditEvent)
+                .where(
+                    AuditEvent.document_id == document_id,
+                    AuditEvent.action == "DOCUMENT_VIEW",
+                    AuditEvent.outcome == "SUCCESS",
+                    AuditEvent.actor_id == resolved_owner_id,
+                )
+            )
+            or 0
+        )
+
     return DocumentAuditSummary(
         successful_views=views,
         distinct_viewers=distinct,
         latest_view_at=latest,
+        external_views=external_views,
+        distinct_external_viewers=external_distinct,
+        latest_external_view_at=external_latest,
+        owner_self_views=owner_self_views,
         successful_downloads=_count_document_events(
             session,
             document_id=document_id,
@@ -638,13 +684,16 @@ def enrich_audit_event_responses(
     session: Session,
     events: list[AuditEvent],
 ) -> list[AuditEventResponse]:
-    """Attach safe actor/target display names when those users still exist."""
+    """Attach safe actor/target/document display fields when those rows still exist."""
     user_ids: set[uuid.UUID] = set()
+    document_ids: set[uuid.UUID] = set()
     for event in events:
         if event.actor_id is not None:
             user_ids.add(event.actor_id)
         if event.target_user_id is not None:
             user_ids.add(event.target_user_id)
+        if event.document_id is not None:
+            document_ids.add(event.document_id)
 
     users_by_id: dict[uuid.UUID, User] = {}
     if user_ids:
@@ -655,11 +704,36 @@ def enrich_audit_event_responses(
             ).all()
         }
 
+    docs_by_id: dict[uuid.UUID, Document] = {}
+    owner_ids: set[uuid.UUID] = set()
+    if document_ids:
+        docs_by_id = {
+            doc.id: doc
+            for doc in session.scalars(
+                select(Document).where(Document.id.in_(document_ids))
+            ).all()
+        }
+        owner_ids = {doc.owner_id for doc in docs_by_id.values()}
+        missing_owners = owner_ids - set(users_by_id)
+        if missing_owners:
+            for owner in session.scalars(
+                select(User).where(User.id.in_(missing_owners))
+            ).all():
+                users_by_id[owner.id] = owner
+
     results: list[AuditEventResponse] = []
     for event in events:
         actor = users_by_id.get(event.actor_id) if event.actor_id else None
         target = (
             users_by_id.get(event.target_user_id) if event.target_user_id else None
+        )
+        doc = docs_by_id.get(event.document_id) if event.document_id else None
+        owner = users_by_id.get(doc.owner_id) if doc is not None else None
+        is_self = bool(
+            doc is not None
+            and event.actor_id is not None
+            and event.actor_id == doc.owner_id
+            and event.action == "DOCUMENT_VIEW"
         )
         results.append(
             AuditEventResponse(
@@ -670,6 +744,11 @@ def enrich_audit_event_responses(
                 actor_email=actor.email if actor else None,
                 action=event.action,
                 document_id=event.document_id,
+                document_title=doc.title if doc else None,
+                document_owner_id=doc.owner_id if doc else None,
+                document_owner_name=owner.name if owner else None,
+                document_owner_email=owner.email if owner else None,
+                is_owner_self_view=is_self,
                 target_user_id=event.target_user_id,
                 target_user_name=target.name if target else None,
                 target_user_email=target.email if target else None,

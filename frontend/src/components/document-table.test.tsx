@@ -59,9 +59,9 @@ describe("DocumentTable shared mode", () => {
       />,
     );
 
-    expect(screen.getByText("READ")).toBeInTheDocument();
-    expect(screen.getByText("EDIT")).toBeInTheDocument();
+    expect(screen.getByText("View only")).toBeInTheDocument();
+    expect(screen.getByText("Can edit")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /delete/i })).toBeNull();
-    expect(screen.getAllByRole("button", { name: /download/i })).toHaveLength(2);
+    expect(screen.getAllByRole("button", { name: /^PDF$/i })).toHaveLength(2);
   });
 });

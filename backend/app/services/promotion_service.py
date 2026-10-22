@@ -156,6 +156,10 @@ def review_promotion_request(
     decision: str,
     admin_note: str | None,
 ) -> OwnerPromotionRequest:
+    """Approve or reject a Viewer→Owner request.
+
+    Approval may only set ``VIEWER`` → ``OWNER``. It never assigns ``ADMIN``.
+    """
     if decision not in {"APPROVED", "REJECTED"}:
         raise PromotionError(
             "Decision must be APPROVED or REJECTED",
@@ -211,10 +215,13 @@ def review_promotion_request(
     request.reviewed_at = now
 
     if decision == "APPROVED":
-        # Promote to OWNER without clearing existing document grants.
+        # Promote VIEWER → OWNER only. Never assign ADMIN. Existing OWNER/ADMIN
+        # requesters keep their role; the request is still closed.
         if requester.role == "VIEWER":
             requester.role = "OWNER"
-        # If already OWNER/ADMIN, approval is a no-op on role but still closes the request.
+        elif requester.role == "ADMIN":
+            # Approval must not alter administrator accounts.
+            pass
 
     try:
         session.flush()
@@ -229,6 +236,10 @@ def review_promotion_request(
     return request
 
 
+# Ordinary Manage Users role API may only assign these values.
+ORDINARY_ASSIGNABLE_ROLES = frozenset({"OWNER", "VIEWER"})
+
+
 def update_user_role(
     session: Session,
     *,
@@ -236,10 +247,23 @@ def update_user_role(
     user_id: uuid.UUID,
     new_role: str,
 ) -> User:
-    """Admin-assigned role change. Never trusts client claims about the admin."""
-    if new_role not in {"ADMIN", "OWNER", "VIEWER"}:
+    """Ordinary admin role assignment: VIEWER ↔ OWNER only.
+
+    Never assigns ``ADMIN`` through this API. Never changes an existing
+    ``ADMIN`` account's role (admins are provisioned via bootstrap/seed only).
+    Callers cannot change their own role through this endpoint.
+    """
+    normalized = (new_role or "").strip().upper()
+    if normalized == "ADMIN":
         raise PromotionError(
-            "Invalid role",
+            "Administrator role cannot be assigned through Manage Users. "
+            "Use the secure bootstrap/seed process for administrators.",
+            status_code=403,
+            reason_code="ADMIN_ASSIGNMENT_FORBIDDEN",
+        )
+    if normalized not in ORDINARY_ASSIGNABLE_ROLES:
+        raise PromotionError(
+            "Role must be OWNER or VIEWER",
             status_code=422,
             reason_code="INVALID_ROLE",
         )
@@ -252,45 +276,25 @@ def update_user_role(
             reason_code="NOT_FOUND",
         )
 
-    if target.id == admin.id and new_role != "ADMIN":
-        # Count other active admins before demoting self.
-        other_admins = (
-            session.scalar(
-                select(func.count())
-                .select_from(User)
-                .where(
-                    User.role == "ADMIN",
-                    User.is_active.is_(True),
-                    User.id != admin.id,
-                )
-            )
-            or 0
+    if target.id == admin.id:
+        raise PromotionError(
+            "You cannot change your own role",
+            status_code=403,
+            reason_code="SELF_ROLE_CHANGE_FORBIDDEN",
         )
-        if other_admins < 1:
-            raise PromotionError(
-                "Cannot demote the last active administrator",
-                status_code=400,
-                reason_code="LAST_ADMIN",
-            )
 
-    if target.role == "ADMIN" and new_role != "ADMIN" and target.is_active:
-        admin_count = (
-            session.scalar(
-                select(func.count())
-                .select_from(User)
-                .where(User.role == "ADMIN", User.is_active.is_(True))
-            )
-            or 0
+    if target.role == "ADMIN":
+        raise PromotionError(
+            "Administrator accounts cannot be reassigned through Manage Users",
+            status_code=403,
+            reason_code="ADMIN_ROLE_PROTECTED",
         )
-        if admin_count <= 1:
-            raise PromotionError(
-                "Cannot demote the last active administrator",
-                status_code=400,
-                reason_code="LAST_ADMIN",
-            )
 
     previous = target.role
-    target.role = new_role
+    if previous == normalized:
+        return target
+
+    target.role = normalized
     try:
         session.flush()
     except SQLAlchemyError as exc:
@@ -306,7 +310,7 @@ def update_user_role(
             "admin_id": str(admin.id),
             "target_id": str(target.id),
             "previous_role": previous,
-            "new_role": new_role,
+            "new_role": normalized,
         },
     )
     return target

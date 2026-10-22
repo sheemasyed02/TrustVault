@@ -11,6 +11,13 @@ import {
 } from "@/lib/api";
 import { formatDateTime } from "@/lib/format";
 
+type FocusFilter =
+  | "external_views"
+  | "owner_views"
+  | "downloads"
+  | "denied"
+  | "all";
+
 interface DocumentAuditPanelProps {
   documentId: string;
 }
@@ -38,7 +45,15 @@ function viewerLabel(event: AuditEventItem): string {
   return metaRole ? `${who} · ${metaRole}` : who;
 }
 
-/** Owner-only document activity with authorised view history as the primary focus. */
+const FOCUS_OPTIONS: { id: FocusFilter; label: string }[] = [
+  { id: "external_views", label: "External views" },
+  { id: "owner_views", label: "My views" },
+  { id: "downloads", label: "Downloads" },
+  { id: "denied", label: "Denied" },
+  { id: "all", label: "All events" },
+];
+
+/** Owner-only document activity — external views are the primary dashboard metric. */
 export function DocumentAuditPanel({ documentId }: DocumentAuditPanelProps) {
   const { accessToken } = useAuth();
   const handleUnauthorized = useHandleUnauthorized();
@@ -46,7 +61,7 @@ export function DocumentAuditPanel({ documentId }: DocumentAuditPanelProps) {
   const [summary, setSummary] = useState<DocumentAuditSummary | null>(null);
   const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
   const [error, setError] = useState<string | null>(null);
-  const [showViewsOnly, setShowViewsOnly] = useState(true);
+  const [focus, setFocus] = useState<FocusFilter>("external_views");
 
   const load = useCallback(
     async (signal?: AbortSignal) => {
@@ -57,10 +72,7 @@ export function DocumentAuditPanel({ documentId }: DocumentAuditPanelProps) {
         const data = await listDocumentAuditRequest(
           accessToken,
           documentId,
-          {
-            page_size: 50,
-            action: showViewsOnly ? "DOCUMENT_VIEW" : undefined,
-          },
+          { page_size: 50, focus },
           signal,
         );
         setEvents(data.results);
@@ -70,12 +82,14 @@ export function DocumentAuditPanel({ documentId }: DocumentAuditPanelProps) {
         if (err instanceof DOMException && err.name === "AbortError") return;
         if (handleUnauthorized(err)) return;
         setError(
-          err instanceof ApiError ? err.detail : "Unable to load document activity.",
+          err instanceof ApiError
+            ? err.detail
+            : "Unable to load document activity.",
         );
         setStatus("error");
       }
     },
-    [accessToken, documentId, handleUnauthorized, showViewsOnly],
+    [accessToken, documentId, focus, handleUnauthorized],
   );
 
   useEffect(() => {
@@ -96,43 +110,34 @@ export function DocumentAuditPanel({ documentId }: DocumentAuditPanelProps) {
             Document activity
           </h2>
           <p className="mt-1 text-sm text-muted">
-            Authorised view counts measure successful preview requests after
-            permission checks — not proof that someone read or understood the
-            file. Downloads are tracked separately. Records cannot be edited
-            through the application.
+            External views are successful previews by others. Your own opens stay
+            in the trail but are excluded from those totals.
           </p>
         </div>
-        <div className="flex flex-wrap gap-2">
+        <button
+          type="button"
+          onClick={() => void load()}
+          className="rounded-md border border-border px-3 py-1.5 text-xs font-semibold hover:bg-accent-soft"
+        >
+          Refresh
+        </button>
+      </div>
+
+      <div className="mt-4 flex flex-wrap gap-2">
+        {FOCUS_OPTIONS.map((option) => (
           <button
+            key={option.id}
             type="button"
-            onClick={() => setShowViewsOnly(true)}
+            onClick={() => setFocus(option.id)}
             className={`rounded-md px-3 py-1.5 text-xs font-semibold ${
-              showViewsOnly
+              focus === option.id
                 ? "bg-accent text-white"
                 : "border border-border hover:bg-accent-soft"
             }`}
           >
-            Views
+            {option.label}
           </button>
-          <button
-            type="button"
-            onClick={() => setShowViewsOnly(false)}
-            className={`rounded-md px-3 py-1.5 text-xs font-semibold ${
-              !showViewsOnly
-                ? "bg-accent text-white"
-                : "border border-border hover:bg-accent-soft"
-            }`}
-          >
-            All events
-          </button>
-          <button
-            type="button"
-            onClick={() => void load()}
-            className="rounded-md border border-border px-3 py-1.5 text-xs font-semibold hover:bg-accent-soft"
-          >
-            Refresh
-          </button>
-        </div>
+        ))}
       </div>
 
       {status === "loading" ? (
@@ -148,18 +153,26 @@ export function DocumentAuditPanel({ documentId }: DocumentAuditPanelProps) {
         <dl className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           <div className="rounded-md border border-border/70 px-3 py-2">
             <dt className="text-xs uppercase tracking-wide text-muted">
-              Authorised views
+              External views
             </dt>
             <dd className="mt-1 font-display text-2xl text-foreground">
-              {summary.successful_views}
+              {summary.external_views ?? 0}
             </dd>
           </div>
           <div className="rounded-md border border-border/70 px-3 py-2">
             <dt className="text-xs uppercase tracking-wide text-muted">
-              Distinct viewers
+              Distinct external viewers
             </dt>
             <dd className="mt-1 font-display text-2xl text-foreground">
-              {summary.distinct_viewers ?? 0}
+              {summary.distinct_external_viewers ?? 0}
+            </dd>
+          </div>
+          <div className="rounded-md border border-border/70 px-3 py-2">
+            <dt className="text-xs uppercase tracking-wide text-muted">
+              My views (trail)
+            </dt>
+            <dd className="mt-1 font-display text-2xl text-foreground">
+              {summary.owner_self_views ?? 0}
             </dd>
           </div>
           <div className="rounded-md border border-border/70 px-3 py-2">
@@ -170,24 +183,12 @@ export function DocumentAuditPanel({ documentId }: DocumentAuditPanelProps) {
               {summary.successful_downloads}
             </dd>
           </div>
-          <div className="rounded-md border border-border/70 px-3 py-2">
-            <dt className="text-xs uppercase tracking-wide text-muted">
-              Latest view
-            </dt>
-            <dd className="mt-1 text-sm text-foreground">
-              {summary.latest_view_at
-                ? formatDateTime(summary.latest_view_at)
-                : "—"}
-            </dd>
-          </div>
         </dl>
       ) : null}
 
       {status === "ready" && events.length === 0 ? (
         <p className="mt-3 text-sm text-muted">
-          {showViewsOnly
-            ? "No authorised views recorded yet for this document."
-            : "No events recorded yet."}
+          No events in this filter yet.
         </p>
       ) : null}
       {status === "ready" && events.length > 0 ? (
@@ -198,7 +199,7 @@ export function DocumentAuditPanel({ documentId }: DocumentAuditPanelProps) {
               className="rounded-md border border-border/70 px-3 py-2"
             >
               <p className="font-semibold">
-                {event.action}{" "}
+                {event.action.replaceAll("_", " ")}{" "}
                 <span
                   className={
                     event.outcome === "SUCCESS"
@@ -208,8 +209,13 @@ export function DocumentAuditPanel({ documentId }: DocumentAuditPanelProps) {
                 >
                   {event.outcome}
                 </span>
+                {event.is_owner_self_view ? (
+                  <span className="ml-2 text-xs font-normal text-muted">
+                    (your view)
+                  </span>
+                ) : null}
               </p>
-              <p className="mt-0.5 text-xs text-muted">
+              <p className="mt-0.5 text-xs text-muted" title={event.created_at}>
                 {formatDateTime(event.created_at)}
                 {event.reason_code ? ` · ${event.reason_code}` : ""}
               </p>

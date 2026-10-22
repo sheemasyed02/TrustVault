@@ -75,16 +75,11 @@ export function DocumentMetadataForm({
   return (
     <section
       aria-label="Edit metadata"
-      className="rounded-xl border border-border bg-surface p-5 shadow-[var(--shadow)]"
+      className="rounded-xl border border-border bg-surface p-5 shadow-[var(--shadow-sm)]"
     >
       <h2 className="font-display text-xl text-foreground">Edit details</h2>
       <p className="mt-1 text-sm text-muted">
-        Owner-only title, category, and description. Document body editing is
-        separate.
-      </p>
-      <p className="mt-1 text-sm text-muted">
-        Only title, category, and description can be changed. Owner and EDIT
-        grantees may save; READ grants are rejected by the server.
+        Update the title, category, and description. Content editing is separate.
       </p>
 
       <form
@@ -93,31 +88,31 @@ export function DocumentMetadataForm({
         noValidate
       >
         <label className="block text-sm">
-          <span className="mb-1 block font-medium">Title</span>
+          <span className="tv-label">Title</span>
           <input
+            className="tv-input"
             value={title}
             maxLength={255}
             onChange={(event) => setTitle(event.target.value)}
-            className="w-full rounded-md border border-border bg-white px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
           />
         </label>
         <label className="block text-sm">
-          <span className="mb-1 block font-medium">Category</span>
+          <span className="tv-label">Category</span>
           <input
+            className="tv-input"
             value={category}
             maxLength={128}
             onChange={(event) => setCategory(event.target.value)}
-            className="w-full rounded-md border border-border bg-white px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
           />
         </label>
         <label className="block text-sm">
-          <span className="mb-1 block font-medium">Description</span>
+          <span className="tv-label">Description</span>
           <textarea
+            className="tv-input"
             value={description}
             maxLength={5000}
             rows={3}
             onChange={(event) => setDescription(event.target.value)}
-            className="w-full rounded-md border border-border bg-white px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
           />
         </label>
 
@@ -135,7 +130,7 @@ export function DocumentMetadataForm({
         <button
           type="submit"
           disabled={submitting}
-          className="rounded-md bg-accent px-4 py-2 text-sm font-semibold text-white hover:bg-accent-strong disabled:opacity-60"
+          className="inline-flex items-center rounded-md bg-accent px-3.5 py-2 text-sm font-semibold text-white hover:bg-accent-strong focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent disabled:opacity-60"
         >
           {submitting ? "Saving…" : "Save changes"}
         </button>

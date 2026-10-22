@@ -222,7 +222,61 @@ def test_viewer_cannot_invoke_admin_apis(
 # ---------------------------------------------------------------------------
 
 
-def test_admin_role_change_takes_effect_on_backend(
+def test_admin_can_promote_viewer_to_owner_and_downgrade_owner_to_viewer(
+    client: TestClient,
+    db_session: Session,
+    auth_settings: Settings,
+):
+    admin = _user(db_session, role="ADMIN")
+    viewer = _user(db_session, role="VIEWER")
+    headers = _auth(admin, auth_settings)
+
+    promoted = client.patch(
+        f"/admin/users/{viewer.id}/role",
+        headers=headers,
+        json={"role": "OWNER"},
+    )
+    assert promoted.status_code == 200
+    assert promoted.json()["role"] == "OWNER"
+    assert "password_hash" not in promoted.json()
+    db_session.refresh(viewer)
+    assert viewer.role == "OWNER"
+
+    me = client.get("/users/me", headers=_auth(viewer, auth_settings))
+    assert me.status_code == 200
+    assert me.json()["role"] == "OWNER"
+
+    downgraded = client.patch(
+        f"/admin/users/{viewer.id}/role",
+        headers=headers,
+        json={"role": "VIEWER"},
+    )
+    assert downgraded.status_code == 200
+    assert downgraded.json()["role"] == "VIEWER"
+    db_session.refresh(viewer)
+    assert viewer.role == "VIEWER"
+
+
+def test_ordinary_role_update_cannot_assign_admin(
+    client: TestClient,
+    db_session: Session,
+    auth_settings: Settings,
+):
+    admin = _user(db_session, role="ADMIN")
+    viewer = _user(db_session, role="VIEWER")
+    for payload in ("ADMIN", "admin", "Admin"):
+        resp = client.patch(
+            f"/admin/users/{viewer.id}/role",
+            headers=_auth(admin, auth_settings),
+            json={"role": payload},
+        )
+        assert resp.status_code == 403, payload
+        assert "Administrator" in resp.json()["detail"] or "ADMIN" in resp.json()["detail"]
+    db_session.refresh(viewer)
+    assert viewer.role == "VIEWER"
+
+
+def test_ordinary_role_update_rejects_unknown_roles(
     client: TestClient,
     db_session: Session,
     auth_settings: Settings,
@@ -232,17 +286,60 @@ def test_admin_role_change_takes_effect_on_backend(
     resp = client.patch(
         f"/admin/users/{viewer.id}/role",
         headers=_auth(admin, auth_settings),
+        json={"role": "SUPERUSER"},
+    )
+    assert resp.status_code == 422
+    db_session.refresh(viewer)
+    assert viewer.role == "VIEWER"
+
+
+def test_cannot_change_existing_admin_role_via_manage_users(
+    client: TestClient,
+    db_session: Session,
+    auth_settings: Settings,
+):
+    admin = _user(db_session, role="ADMIN")
+    other_admin = _user(db_session, role="ADMIN")
+    resp = client.patch(
+        f"/admin/users/{other_admin.id}/role",
+        headers=_auth(admin, auth_settings),
         json={"role": "OWNER"},
     )
-    assert resp.status_code == 200
-    assert resp.json()["role"] == "OWNER"
-    assert "password_hash" not in resp.json()
-    db_session.refresh(viewer)
-    assert viewer.role == "OWNER"
+    assert resp.status_code == 403
+    db_session.refresh(other_admin)
+    assert other_admin.role == "ADMIN"
 
-    me = client.get("/users/me", headers=_auth(viewer, auth_settings))
-    assert me.status_code == 200
-    assert me.json()["role"] == "OWNER"
+
+def test_admin_cannot_change_own_role(
+    client: TestClient,
+    db_session: Session,
+    auth_settings: Settings,
+):
+    admin = _user(db_session, role="ADMIN")
+    resp = client.patch(
+        f"/admin/users/{admin.id}/role",
+        headers=_auth(admin, auth_settings),
+        json={"role": "OWNER"},
+    )
+    assert resp.status_code == 403
+    db_session.refresh(admin)
+    assert admin.role == "ADMIN"
+
+
+def test_unauthenticated_cannot_change_roles(
+    client: TestClient,
+    db_session: Session,
+    auth_settings: Settings,
+):
+    del auth_settings
+    viewer = _user(db_session, role="VIEWER")
+    resp = client.patch(
+        f"/admin/users/{viewer.id}/role",
+        json={"role": "OWNER"},
+    )
+    assert resp.status_code == 401
+    db_session.refresh(viewer)
+    assert viewer.role == "VIEWER"
 
 
 def test_status_patch_still_rejects_role_field(
@@ -260,6 +357,42 @@ def test_status_patch_still_rejects_role_field(
     assert resp.status_code == 422
     db_session.refresh(viewer)
     assert viewer.role == "VIEWER"
+
+
+def test_promotion_approval_never_assigns_admin(
+    client: TestClient,
+    db_session: Session,
+    auth_settings: Settings,
+):
+    viewer = _user(db_session, role="VIEWER")
+    admin = _user(db_session, role="ADMIN")
+    created = client.post(
+        "/promotions/requests",
+        headers=_auth(viewer, auth_settings),
+        json={"justification": "Need upload"},
+    )
+    assert created.status_code == 201
+    request_id = created.json()["id"]
+
+    # Extra role field in the review body must be rejected (forbid extras).
+    forged = client.post(
+        f"/admin/promotions/{request_id}/review",
+        headers=_auth(admin, auth_settings),
+        json={"decision": "APPROVED", "role": "ADMIN"},
+    )
+    assert forged.status_code == 422
+    db_session.refresh(viewer)
+    assert viewer.role == "VIEWER"
+
+    approved = client.post(
+        f"/admin/promotions/{request_id}/review",
+        headers=_auth(admin, auth_settings),
+        json={"decision": "APPROVED"},
+    )
+    assert approved.status_code == 200
+    db_session.refresh(viewer)
+    assert viewer.role == "OWNER"
+    assert viewer.role != "ADMIN"
 
 
 # ---------------------------------------------------------------------------

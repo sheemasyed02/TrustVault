@@ -246,7 +246,7 @@ def update_user_role_admin(
     session: Session = Depends(get_db),
     x_request_id: str | None = Header(default=None, alias="X-Request-ID"),
 ) -> AdminUserSummary:
-    """Assign platform role ADMIN / OWNER / VIEWER. ADMIN only. Audited."""
+    """Assign OWNER or VIEWER only. Never assigns ADMIN. ADMIN-only, audited."""
     request_id = (x_request_id or str(uuid.uuid4())).strip() or str(uuid.uuid4())
     previous_role = None
     target = session.get(User, user_id)
@@ -257,7 +257,7 @@ def update_user_role_admin(
             session,
             admin=current_user,
             user_id=user_id,
-            new_role=body.role.upper(),
+            new_role=body.role,
         )
     except PromotionError as exc:
         raise HTTPException(status_code=exc.status_code, detail=exc.message) from None

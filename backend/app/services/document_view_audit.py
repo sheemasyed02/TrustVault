@@ -13,6 +13,11 @@ successful view from the same actor for the same document within
 streamed). Denied attempts are always recorded separately and never increase
 the successful view count.
 
+**Owner dashboards** report *external* views only: SUCCESS ``DOCUMENT_VIEW``
+events where ``actor_id != document.owner_id``. The owner's own previews remain
+in the security audit trail but are excluded from external totals and distinct
+external-viewer counts.
+
 Timestamps are always server-generated via the audit trail writer.
 """
 
@@ -77,17 +82,29 @@ def document_view_stats(
     session: Session,
     *,
     document_id: uuid.UUID,
+    exclude_actor_id: uuid.UUID | None = None,
 ) -> tuple[int, int, datetime | None]:
-    """Return (total_views, distinct_viewers, latest_view_at)."""
+    """Return (total_views, distinct_viewers, latest_view_at).
+
+    When ``exclude_actor_id`` is set (typically the document owner), that actor's
+    SUCCESS views are omitted from the totals (external-view dashboard).
+    """
+    filters = [
+        AuditEvent.document_id == document_id,
+        AuditEvent.action == "DOCUMENT_VIEW",
+        AuditEvent.outcome == "SUCCESS",
+    ]
+    if exclude_actor_id is not None:
+        filters.append(
+            or_(
+                AuditEvent.actor_id.is_(None),
+                AuditEvent.actor_id != exclude_actor_id,
+            )
+        )
+
     total = (
         session.scalar(
-            select(func.count())
-            .select_from(AuditEvent)
-            .where(
-                AuditEvent.document_id == document_id,
-                AuditEvent.action == "DOCUMENT_VIEW",
-                AuditEvent.outcome == "SUCCESS",
-            )
+            select(func.count()).select_from(AuditEvent).where(*filters)
         )
         or 0
     )
@@ -95,21 +112,12 @@ def document_view_stats(
         session.scalar(
             select(func.count(func.distinct(AuditEvent.actor_id)))
             .select_from(AuditEvent)
-            .where(
-                AuditEvent.document_id == document_id,
-                AuditEvent.action == "DOCUMENT_VIEW",
-                AuditEvent.outcome == "SUCCESS",
-                AuditEvent.actor_id.is_not(None),
-            )
+            .where(*filters, AuditEvent.actor_id.is_not(None))
         )
         or 0
     )
     latest = session.scalar(
-        select(func.max(AuditEvent.created_at)).where(
-            AuditEvent.document_id == document_id,
-            AuditEvent.action == "DOCUMENT_VIEW",
-            AuditEvent.outcome == "SUCCESS",
-        )
+        select(func.max(AuditEvent.created_at)).where(*filters)
     )
     return total, distinct, latest
 
@@ -159,7 +167,12 @@ def list_owner_document_view_activity(
 
     items: list[DocumentViewActivityItem] = []
     for doc in documents:
-        views, distinct, latest = document_view_stats(session, document_id=doc.id)
+        # Owner dashboard: external viewers only (exclude the owner's self-views).
+        views, distinct, latest = document_view_stats(
+            session,
+            document_id=doc.id,
+            exclude_actor_id=owner.id,
+        )
         items.append(
             DocumentViewActivityItem(
                 document_id=doc.id,
@@ -173,7 +186,7 @@ def list_owner_document_view_activity(
             )
         )
 
-    # Platform-ish summary scoped to this owner's documents.
+    # External-view summary scoped to this owner's documents.
     owned_ids = select(Document.id).where(
         Document.owner_id == owner.id,
         Document.deleted_at.is_(None),
@@ -186,6 +199,10 @@ def list_owner_document_view_activity(
                 AuditEvent.document_id.in_(owned_ids),
                 AuditEvent.action == "DOCUMENT_VIEW",
                 AuditEvent.outcome == "SUCCESS",
+                or_(
+                    AuditEvent.actor_id.is_(None),
+                    AuditEvent.actor_id != owner.id,
+                ),
             )
         )
         or 0

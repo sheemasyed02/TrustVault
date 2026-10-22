@@ -1,26 +1,16 @@
 "use client";
 
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
-import {
-  Suspense,
-  useCallback,
-  useEffect,
-  useRef,
-  useState,
-  type FormEvent,
-} from "react";
+import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
 
 import { useAuth, useHandleUnauthorized } from "@/components/auth-provider";
+import { AuditEventsTable } from "@/components/audit-events-table";
 import {
   ApiError,
   listAuditEventsRequest,
-  verifyAuditIntegrityRequest,
   type AuditEventItem,
-  type AuditIntegrityResult,
   type AuditListParams,
 } from "@/lib/api";
-import { formatDateTime } from "@/lib/format";
 
 interface FilterState {
   actor_id: string;
@@ -42,34 +32,13 @@ const emptyFilters: FilterState = {
   created_to: "",
 };
 
-function displayUser(
-  id: string | null,
-  name?: string | null,
-  email?: string | null,
-): string {
-  if (email) return name ? `${name} <${email}>` : email;
-  return id ?? "—";
-}
-
-export default function AdminAuditPage() {
-  return (
-    <Suspense
-      fallback={
-        <p className="text-sm text-muted" role="status">
-          Loading audit log…
-        </p>
-      }
-    >
-      <AdminAuditPageContent />
-    </Suspense>
-  );
-}
-
-function AdminAuditPageContent() {
+/**
+ * Admin Audit Logs — answers "what happened?"
+ * Integrity verification lives on /admin/audit/integrity.
+ */
+export default function AdminAuditLogsPage() {
   const { accessToken } = useAuth();
   const handleUnauthorized = useHandleUnauthorized();
-  const searchParams = useSearchParams();
-  const integritySectionRef = useRef<HTMLElement | null>(null);
   const [filters, setFilters] = useState<FilterState>(emptyFilters);
   const [applied, setApplied] = useState<FilterState>(emptyFilters);
   const [page, setPage] = useState(1);
@@ -78,10 +47,6 @@ function AdminAuditPageContent() {
   const [totalPages, setTotalPages] = useState(0);
   const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
   const [error, setError] = useState<string | null>(null);
-  const [integrity, setIntegrity] = useState<AuditIntegrityResult | null>(null);
-  const [integrityAt, setIntegrityAt] = useState<string | null>(null);
-  const [integrityError, setIntegrityError] = useState<string | null>(null);
-  const [verifying, setVerifying] = useState(false);
 
   const load = useCallback(
     async (nextPage: number, nextFilters: FilterState, signal?: AbortSignal) => {
@@ -130,35 +95,16 @@ function AdminAuditPageContent() {
     return () => controller.abort();
   }, [accessToken, applied, load]);
 
-  useEffect(() => {
-    if (searchParams.get("focus") !== "integrity") return;
-    integritySectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
-  }, [searchParams]);
+  const pageMetrics = useMemo(() => {
+    const success = events.filter((e) => e.outcome === "SUCCESS").length;
+    const denied = events.filter((e) => e.outcome === "DENIED").length;
+    const views = events.filter((e) => e.action === "DOCUMENT_VIEW").length;
+    return { success, denied, views, shown: events.length };
+  }, [events]);
 
   function onApplyFilters(event: FormEvent) {
     event.preventDefault();
     setApplied({ ...filters });
-  }
-
-  async function onVerify() {
-    if (!accessToken || verifying) return;
-    setVerifying(true);
-    setIntegrityError(null);
-    try {
-      const result = await verifyAuditIntegrityRequest(accessToken);
-      setIntegrity(result);
-      setIntegrityAt(new Date().toISOString());
-    } catch (err) {
-      if (handleUnauthorized(err)) return;
-      setIntegrity(null);
-      setIntegrityError(
-        err instanceof ApiError
-          ? err.detail
-          : "Integrity verification request failed.",
-      );
-    } finally {
-      setVerifying(false);
-    }
   }
 
   return (
@@ -172,15 +118,22 @@ function AdminAuditPageContent() {
 
       <header className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h1 className="font-display text-3xl tracking-tight text-foreground">
-            Audit log
+          <p className="text-sm font-semibold uppercase tracking-[0.18em] text-accent-strong">
+            Administration
+          </p>
+          <h1 className="mt-2 font-display text-2xl tracking-tight text-foreground sm:text-3xl">
+            Audit logs
           </h1>
-          <p className="mt-2 text-sm text-muted">
-            Platform-wide metadata only — never confidential document contents.
-            Timestamps are shown in your local timezone; the API stores UTC.
-            Hash-chain integrity detects many in-place edits but is not
-            tamper-proof against a privileged database administrator who can
-            rewrite the whole table.
+          <p className="mt-2 max-w-xl text-sm text-muted">
+            Persisted security events across the platform. Timestamps use your
+            local timezone. For hash-chain checks, open{" "}
+            <Link
+              href="/admin/audit/integrity"
+              className="font-semibold text-accent-strong underline"
+            >
+              Audit Integrity
+            </Link>
+            .
           </p>
         </div>
         <button
@@ -192,122 +145,43 @@ function AdminAuditPageContent() {
         </button>
       </header>
 
-      <section
-        ref={integritySectionRef}
-        id="audit-integrity"
-        className="rounded-xl border border-border bg-surface p-5 shadow-[var(--shadow)]"
-      >
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div>
-            <h2 className="font-display text-xl text-foreground">
-              Audit chain integrity
-            </h2>
-            <p className="mt-1 text-sm text-muted">
-              A green valid badge is shown only when the API returns{" "}
-              <code className="text-xs">valid: true</code>.
-            </p>
-          </div>
-          <button
-            type="button"
-            onClick={() => void onVerify()}
-            disabled={verifying}
-            className="rounded-md bg-accent px-4 py-2 text-sm font-semibold text-white hover:bg-accent-strong disabled:opacity-60"
-          >
-            {verifying ? "Verifying…" : "Verify chain"}
-          </button>
-        </div>
-      {integrityError ? (
-        <p role="alert" className="mt-3 text-sm text-danger">
-          {integrityError}
-        </p>
+      {status === "ready" ? (
+        <dl className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <Metric label="Matching events" value={String(total)} />
+          <Metric label="On this page" value={String(pageMetrics.shown)} />
+          <Metric label="Success (page)" value={String(pageMetrics.success)} />
+          <Metric label="Denied (page)" value={String(pageMetrics.denied)} />
+        </dl>
       ) : null}
-      {integrity ? (
-        <div
-          className={`mt-3 rounded-xl border px-4 py-3 text-sm ${
-            integrity.valid
-              ? "border-accent/30 bg-accent-soft/40 text-foreground"
-              : "border-danger/30 bg-danger/5 text-danger"
-          }`}
-          role="status"
-        >
-          <p className="font-semibold">
-            Chain {integrity.valid ? "valid" : "invalid"}
-            {integrityAt ? ` · checked ${formatDateTime(integrityAt)}` : ""}
-          </p>
-          <p className="mt-1">
-            {integrity.detail}
-            {integrity.reason_code ? ` (${integrity.reason_code})` : ""}
-          </p>
-          <p className="mt-1 text-xs text-muted">
-            Checked {integrity.checked_count} of {integrity.event_count} events
-            {integrity.first_failure_event_id
-              ? ` · first failure ${integrity.first_failure_event_id}`
-              : ""}
-          </p>
-        </div>
-      ) : (
-        <p className="mt-3 text-sm text-muted">
-          No verification run yet in this session.
-        </p>
-      )}
-      </section>
 
       <form
         onSubmit={onApplyFilters}
         className="grid gap-3 rounded-xl border border-border bg-surface p-4 shadow-[var(--shadow)] sm:grid-cols-2 lg:grid-cols-3"
       >
-        <label className="text-sm">
-          <span className="text-xs uppercase tracking-wide text-muted">
-            Actor ID
-          </span>
-          <input
-            value={filters.actor_id}
-            onChange={(e) =>
-              setFilters((prev) => ({ ...prev, actor_id: e.target.value }))
-            }
-            className="mt-1 w-full rounded-md border border-border px-3 py-2"
-            placeholder="UUID"
-          />
-        </label>
-        <label className="text-sm">
-          <span className="text-xs uppercase tracking-wide text-muted">
-            Action
-          </span>
-          <input
-            value={filters.action}
-            onChange={(e) =>
-              setFilters((prev) => ({ ...prev, action: e.target.value }))
-            }
-            className="mt-1 w-full rounded-md border border-border px-3 py-2"
-            placeholder="LOGIN"
-          />
-        </label>
-        <label className="text-sm">
-          <span className="text-xs uppercase tracking-wide text-muted">
-            Document ID
-          </span>
-          <input
-            value={filters.document_id}
-            onChange={(e) =>
-              setFilters((prev) => ({ ...prev, document_id: e.target.value }))
-            }
-            className="mt-1 w-full rounded-md border border-border px-3 py-2"
-            placeholder="UUID"
-          />
-        </label>
-        <label className="text-sm">
-          <span className="text-xs uppercase tracking-wide text-muted">
-            Owner ID
-          </span>
-          <input
-            value={filters.owner_id}
-            onChange={(e) =>
-              setFilters((prev) => ({ ...prev, owner_id: e.target.value }))
-            }
-            className="mt-1 w-full rounded-md border border-border px-3 py-2"
-            placeholder="Document owner UUID"
-          />
-        </label>
+        <Field
+          label="Actor ID"
+          value={filters.actor_id}
+          onChange={(v) => setFilters((p) => ({ ...p, actor_id: v }))}
+          placeholder="UUID"
+        />
+        <Field
+          label="Action"
+          value={filters.action}
+          onChange={(v) => setFilters((p) => ({ ...p, action: v }))}
+          placeholder="DOCUMENT_VIEW"
+        />
+        <Field
+          label="Document ID"
+          value={filters.document_id}
+          onChange={(v) => setFilters((p) => ({ ...p, document_id: v }))}
+          placeholder="UUID"
+        />
+        <Field
+          label="Owner ID"
+          value={filters.owner_id}
+          onChange={(v) => setFilters((p) => ({ ...p, owner_id: v }))}
+          placeholder="Document owner UUID"
+        />
         <label className="text-sm">
           <span className="text-xs uppercase tracking-wide text-muted">
             Outcome
@@ -320,11 +194,11 @@ function AdminAuditPageContent() {
                 outcome: e.target.value as FilterState["outcome"],
               }))
             }
-            className="mt-1 w-full rounded-md border border-border px-3 py-2"
+            className="mt-1 w-full rounded-md border border-border bg-white px-3 py-2"
           >
             <option value="">Any</option>
-            <option value="SUCCESS">SUCCESS</option>
-            <option value="DENIED">DENIED</option>
+            <option value="SUCCESS">Success</option>
+            <option value="DENIED">Denied</option>
           </select>
         </label>
         <label className="text-sm">
@@ -337,7 +211,7 @@ function AdminAuditPageContent() {
             onChange={(e) =>
               setFilters((prev) => ({ ...prev, created_from: e.target.value }))
             }
-            className="mt-1 w-full rounded-md border border-border px-3 py-2"
+            className="mt-1 w-full rounded-md border border-border bg-white px-3 py-2"
           />
         </label>
         <label className="text-sm">
@@ -350,7 +224,7 @@ function AdminAuditPageContent() {
             onChange={(e) =>
               setFilters((prev) => ({ ...prev, created_to: e.target.value }))
             }
-            className="mt-1 w-full rounded-md border border-border px-3 py-2"
+            className="mt-1 w-full rounded-md border border-border bg-white px-3 py-2"
           />
         </label>
         <div className="flex items-end gap-2 sm:col-span-2 lg:col-span-3">
@@ -378,89 +252,24 @@ function AdminAuditPageContent() {
           Loading audit events…
         </p>
       ) : null}
+
       {status === "error" ? (
-        <div role="alert" className="text-sm text-danger">
-          <p>{error}</p>
+        <div
+          role="alert"
+          className="rounded-xl border border-danger/30 bg-danger/5 px-4 py-3 text-sm"
+        >
+          <p className="text-danger">{error}</p>
           <button
             type="button"
-            className="mt-2 font-semibold underline"
+            className="mt-2 font-semibold text-danger underline"
             onClick={() => void load(page, applied)}
           >
             Retry
           </button>
         </div>
       ) : null}
-      {status === "ready" && events.length === 0 ? (
-        <p className="text-sm text-muted" role="status">
-          No audit events match these filters.
-        </p>
-      ) : null}
 
-      {status === "ready" && events.length > 0 ? (
-        <div className="overflow-x-auto rounded-xl border border-border bg-surface shadow-[var(--shadow)]">
-          <table className="min-w-full text-left text-sm">
-            <thead className="border-b border-border text-xs uppercase tracking-wide text-muted">
-              <tr>
-                <th className="px-3 py-3 font-semibold">When</th>
-                <th className="px-3 py-3 font-semibold">Action</th>
-                <th className="px-3 py-3 font-semibold">Outcome</th>
-                <th className="px-3 py-3 font-semibold">Actor</th>
-                <th className="px-3 py-3 font-semibold">Target</th>
-                <th className="px-3 py-3 font-semibold">Document</th>
-                <th className="px-3 py-3 font-semibold">Reason</th>
-              </tr>
-            </thead>
-            <tbody>
-              {events.map((event) => (
-                <tr key={event.id} className="border-b border-border/70 align-top">
-                  <td className="px-3 py-3 text-muted">
-                    {formatDateTime(event.created_at)}
-                  </td>
-                  <td className="px-3 py-3 font-medium text-foreground">
-                    {event.action}
-                    {typeof event.metadata?.permission === "string" ? (
-                      <span className="mt-0.5 block text-xs font-normal text-muted">
-                        {event.metadata.permission}
-                      </span>
-                    ) : null}
-                  </td>
-                  <td className="px-3 py-3">
-                    <span
-                      className={`rounded-md px-2 py-0.5 text-xs font-semibold ${
-                        event.outcome === "DENIED"
-                          ? "bg-danger/10 text-danger"
-                          : "bg-accent-soft text-accent-strong"
-                      }`}
-                    >
-                      {event.outcome}
-                    </span>
-                  </td>
-                  <td className="px-3 py-3 text-xs text-muted">
-                    {displayUser(
-                      event.actor_id,
-                      event.actor_name,
-                      event.actor_email,
-                    )}
-                  </td>
-                  <td className="px-3 py-3 text-xs text-muted">
-                    {displayUser(
-                      event.target_user_id,
-                      event.target_user_name,
-                      event.target_user_email,
-                    )}
-                  </td>
-                  <td className="px-3 py-3 break-all font-mono text-[11px] text-muted">
-                    {event.document_id ?? "—"}
-                  </td>
-                  <td className="px-3 py-3 text-muted">
-                    {event.reason_code ?? "—"}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      ) : null}
+      {status === "ready" ? <AuditEventsTable events={events} /> : null}
 
       {status === "ready" && totalPages > 1 ? (
         <div className="flex flex-wrap items-center gap-3 text-sm">
@@ -473,7 +282,7 @@ function AdminAuditPageContent() {
             Previous
           </button>
           <span className="text-muted">
-            Page {page} of {totalPages} ({total} events)
+            Page {page} of {totalPages} · {total} events
           </span>
           <button
             type="button"
@@ -485,6 +294,39 @@ function AdminAuditPageContent() {
           </button>
         </div>
       ) : null}
+    </div>
+  );
+}
+
+function Field({
+  label,
+  value,
+  onChange,
+  placeholder,
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  placeholder?: string;
+}) {
+  return (
+    <label className="text-sm">
+      <span className="text-xs uppercase tracking-wide text-muted">{label}</span>
+      <input
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className="mt-1 w-full rounded-md border border-border bg-white px-3 py-2"
+        placeholder={placeholder}
+      />
+    </label>
+  );
+}
+
+function Metric({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-xl border border-border bg-surface px-4 py-3 shadow-[var(--shadow)]">
+      <dt className="text-xs uppercase tracking-wide text-muted">{label}</dt>
+      <dd className="mt-1 font-display text-2xl text-foreground">{value}</dd>
     </div>
   );
 }

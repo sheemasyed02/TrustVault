@@ -1,3 +1,5 @@
+import { Suspense } from "react";
+
 import { LoginEntry } from "@/components/login-entry";
 
 export default function HomePage() {
@@ -22,7 +24,15 @@ export default function HomePage() {
       </section>
 
       <div className="flex justify-start md:justify-end">
-        <LoginEntry />
+        <Suspense
+          fallback={
+            <div className="w-full max-w-md rounded-xl border border-border bg-surface p-6 text-sm text-muted shadow-[var(--shadow)]">
+              Loading sign-in…
+            </div>
+          }
+        >
+          <LoginEntry />
+        </Suspense>
       </div>
     </div>
   );

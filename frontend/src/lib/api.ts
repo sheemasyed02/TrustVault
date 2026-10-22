@@ -347,10 +347,11 @@ export async function reviewPromotionRequest(
   );
 }
 
+/** Ordinary Manage Users role assignment — OWNER or VIEWER only (never ADMIN). */
 export async function patchAdminUserRoleRequest(
   token: string,
   userId: string,
-  role: UserRole,
+  role: "OWNER" | "VIEWER",
   signal?: AbortSignal,
 ): Promise<AdminUserSummary> {
   return apiRequest<AdminUserSummary>(`/admin/users/${userId}/role`, {
@@ -364,13 +365,24 @@ export async function patchAdminUserRoleRequest(
 export async function listDocumentAuditRequest(
   token: string,
   documentId: string,
-  params: { page?: number; page_size?: number; action?: string } = {},
+  params: {
+    page?: number;
+    page_size?: number;
+    action?: string;
+    focus?:
+      | "external_views"
+      | "owner_views"
+      | "downloads"
+      | "denied"
+      | "all";
+  } = {},
   signal?: AbortSignal,
 ): Promise<AuditEventListResponse> {
   const query = buildQuery({
     page: params.page,
     page_size: params.page_size,
     action: params.action,
+    focus: params.focus,
   });
   return apiRequest<AuditEventListResponse>(
     `/documents/${documentId}/audit${query}`,
@@ -454,6 +466,36 @@ export async function getCurrentUserRequest(
   return apiRequest<UserPublic>("/users/me", {
     method: "GET",
     token,
+    signal,
+  });
+}
+
+export async function updateCurrentUserProfileRequest(
+  token: string,
+  body: { name: string },
+  signal?: AbortSignal,
+): Promise<UserPublic> {
+  return apiRequest<UserPublic>("/users/me", {
+    method: "PATCH",
+    token,
+    body,
+    signal,
+  });
+}
+
+export async function changePasswordRequest(
+  token: string,
+  body: {
+    current_password: string;
+    new_password: string;
+    confirm_password: string;
+  },
+  signal?: AbortSignal,
+): Promise<{ message: string }> {
+  return apiRequest<{ message: string }>("/users/me/password", {
+    method: "POST",
+    token,
+    body,
     signal,
   });
 }
@@ -945,6 +987,11 @@ export interface AuditEventItem {
   actor_email?: string | null;
   action: string;
   document_id: string | null;
+  document_title?: string | null;
+  document_owner_id?: string | null;
+  document_owner_name?: string | null;
+  document_owner_email?: string | null;
+  is_owner_self_view?: boolean;
   target_user_id: string | null;
   target_user_name?: string | null;
   target_user_email?: string | null;
@@ -960,6 +1007,10 @@ export interface DocumentAuditSummary {
   successful_views: number;
   distinct_viewers?: number;
   latest_view_at?: string | null;
+  external_views?: number;
+  distinct_external_viewers?: number;
+  latest_external_view_at?: string | null;
+  owner_self_views?: number;
   successful_downloads: number;
   denied_access_attempts: number;
   permission_grants: number;

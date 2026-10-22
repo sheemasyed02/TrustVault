@@ -120,7 +120,7 @@ Document (and non-owner grant) rows are locked with `FOR UPDATE`, then edit auth
 | Capability | Who | Notes |
 | --- | --- | --- |
 | `GET /admin/summary` | ADMIN | Accurate user + audit outcome counts |
-| List users / set `is_active` | ADMIN | Audited; no role mass-assignment |
+| List users / set `is_active` / role VIEWER↔OWNER | ADMIN | Audited; ordinary role API never assigns `ADMIN` (bootstrap/seed only) |
 | List audit events / verify chain | ADMIN | Metadata only; no file bytes |
 | Read/download arbitrary documents | Nobody by role alone | Still requires ownership or grant |
 

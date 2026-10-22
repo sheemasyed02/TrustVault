@@ -2,6 +2,8 @@
 
 import Link from "next/link";
 
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import type { DocumentAccessLevel, DocumentListItem, UserPublic } from "@/lib/api";
 import { formatDocumentAccessLabel } from "@/lib/document-access";
 import { formatBytes, formatDateTime, mimeLabel } from "@/lib/format";
@@ -29,20 +31,9 @@ export function DocumentTableSkeleton() {
 }
 
 function AccessBadge({ level }: { level: DocumentAccessLevel }) {
-  const label = formatDocumentAccessLabel(level);
   const tone =
-    level === "EDIT"
-      ? "bg-accent-soft text-accent-strong"
-      : level === "OWNER"
-        ? "bg-white text-foreground border border-border"
-        : "bg-white text-muted border border-border";
-  return (
-    <span
-      className={`inline-block rounded px-1.5 py-0.5 text-xs font-semibold ${tone}`}
-    >
-      {level === "OWNER" ? "Owner" : level}
-    </span>
-  );
+    level === "EDIT" || level === "OWNER" ? ("accent" as const) : ("neutral" as const);
+  return <Badge tone={tone}>{formatDocumentAccessLabel(level)}</Badge>;
 }
 
 export function DocumentTable({
@@ -54,22 +45,17 @@ export function DocumentTable({
   mode,
 }: DocumentTableProps) {
   return (
-    <div className="overflow-x-auto rounded-xl border border-border bg-surface shadow-[var(--shadow)]">
-      <table className="min-w-full text-left text-sm">
-        <thead className="border-b border-border bg-white/50 text-xs uppercase tracking-wide text-muted">
+    <div className="tv-table-wrap">
+      <table className="tv-table">
+        <thead>
           <tr>
-            <th className="px-4 py-3 font-semibold">Title</th>
-            <th className="px-4 py-3 font-semibold">Category</th>
-            {mode === "shared" || mode === "all" ? (
-              <th className="px-4 py-3 font-semibold">Your access</th>
-            ) : null}
-            <th className="px-4 py-3 font-semibold">Type</th>
-            <th className="px-4 py-3 font-semibold">Size</th>
-            <th className="px-4 py-3 font-semibold">Created</th>
-            {mode !== "owned" ? (
-              <th className="px-4 py-3 font-semibold">Owner</th>
-            ) : null}
-            <th className="px-4 py-3 font-semibold">Actions</th>
+            <th>Title</th>
+            <th>Category</th>
+            {mode === "shared" || mode === "all" ? <th>Access</th> : null}
+            <th className="hidden sm:table-cell">Type</th>
+            <th className="hidden md:table-cell">Updated</th>
+            {mode !== "owned" ? <th className="hidden sm:table-cell">Owner</th> : null}
+            <th>Actions</th>
           </tr>
         </thead>
         <tbody>
@@ -78,61 +64,66 @@ export function DocumentTable({
               doc.your_access === "OWNER" || doc.owner.id === currentUser.id;
             const accessLabel = formatDocumentAccessLabel(doc.your_access);
             return (
-              <tr key={doc.id} className="border-b border-border/70 last:border-0">
-                <td className="px-4 py-3 font-medium text-foreground">
+              <tr key={doc.id}>
+                <td className="font-medium text-foreground">
                   <Link
                     href={`/documents/${doc.id}`}
-                    className="hover:text-accent-strong focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+                    className="hover:text-accent-strong"
                   >
                     {doc.title}
                   </Link>
                   <span className="sr-only"> ({accessLabel})</span>
+                  <p className="mt-0.5 text-xs text-muted sm:hidden">
+                    {mimeLabel(doc.mime_type)} · {formatBytes(doc.file_size)}
+                  </p>
                 </td>
-                <td className="px-4 py-3 text-muted">{doc.category}</td>
+                <td className="text-muted">{doc.category}</td>
                 {mode === "shared" || mode === "all" ? (
-                  <td className="px-4 py-3">
+                  <td>
                     <AccessBadge level={doc.your_access} />
                   </td>
                 ) : null}
-                <td className="px-4 py-3 text-muted">{mimeLabel(doc.mime_type)}</td>
-                <td className="px-4 py-3 text-muted">
-                  {formatBytes(doc.file_size)}
+                <td className="hidden text-muted sm:table-cell">
+                  {mimeLabel(doc.mime_type)}
+                  <span className="mt-0.5 block text-xs">
+                    {formatBytes(doc.file_size)}
+                  </span>
                 </td>
-                <td className="px-4 py-3 text-muted">
+                <td className="hidden text-muted md:table-cell">
                   {formatDateTime(doc.created_at)}
                 </td>
                 {mode !== "owned" ? (
-                  <td className="px-4 py-3 text-muted">
+                  <td className="hidden text-muted sm:table-cell">
                     {doc.owner.name}
                     {isOwner ? (
                       <span className="ml-1 text-xs text-accent-strong">(you)</span>
                     ) : null}
                   </td>
                 ) : null}
-                <td className="px-4 py-3">
-                  <div className="flex flex-wrap gap-2">
+                <td>
+                  <div className="flex flex-wrap gap-1.5">
                     <Link
                       href={`/documents/${doc.id}`}
-                      className="rounded-md border border-border px-2 py-1 text-xs font-semibold hover:bg-accent-soft"
+                      className="inline-flex items-center justify-center rounded-md border border-border bg-white px-2.5 py-1.5 text-xs font-semibold hover:bg-accent-soft focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
                     >
                       Open
                     </Link>
-                    <button
-                      type="button"
+                    <Button
+                      size="sm"
+                      variant="secondary"
                       onClick={() => onDownload(doc)}
                       disabled={downloadingId === doc.id}
-                      className="rounded-md border border-border px-2 py-1 text-xs font-semibold hover:bg-accent-soft disabled:opacity-60"
                     >
-                      {downloadingId === doc.id ? "Downloading…" : "Download PDF"}
-                    </button>
+                      {downloadingId === doc.id ? "…" : "PDF"}
+                    </Button>
                     {isOwner && onDelete ? (
-                      <button
-                        type="button"
+                      <Button
+                        size="sm"
+                        variant="danger"
                         onClick={() => onDelete(doc)}
-                        className="rounded-md border border-danger/40 px-2 py-1 text-xs font-semibold text-danger hover:bg-danger/5"
                       >
                         Delete
-                      </button>
+                      </Button>
                     ) : null}
                   </div>
                 </td>
@@ -160,27 +151,28 @@ export function PaginationBar({
   return (
     <div className="flex flex-wrap items-center justify-between gap-3 text-sm">
       <p className="text-muted">
-        Server total: <span className="font-medium text-foreground">{total}</span>
+        <span className="font-medium text-foreground">{total}</span> result
+        {total === 1 ? "" : "s"}
         {" · "}
         Page {page} of {totalPages}
       </p>
       <div className="flex gap-2">
-        <button
-          type="button"
+        <Button
+          size="sm"
+          variant="secondary"
           disabled={page <= 1}
           onClick={() => onPageChange(page - 1)}
-          className="rounded-md border border-border px-3 py-1.5 font-semibold disabled:opacity-40"
         >
           Previous
-        </button>
-        <button
-          type="button"
+        </Button>
+        <Button
+          size="sm"
+          variant="secondary"
           disabled={page >= totalPages}
           onClick={() => onPageChange(page + 1)}
-          className="rounded-md border border-border px-3 py-1.5 font-semibold disabled:opacity-40"
         >
           Next
-        </button>
+        </Button>
       </div>
     </div>
   );

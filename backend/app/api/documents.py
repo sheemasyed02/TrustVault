@@ -649,6 +649,13 @@ def list_document_audit_events(
         default=None,
         description="Optional action filter, e.g. DOCUMENT_VIEW",
     ),
+    focus: str | None = Query(
+        default=None,
+        description=(
+            "Optional focus: external_views | owner_views | downloads | denied | all. "
+            "external_views excludes the owner's own DOCUMENT_VIEW SUCCESS events."
+        ),
+    ),
     current_user: User = Depends(get_current_user),
     session: Session = Depends(get_db),
 ) -> AuditEventListResponse:
@@ -657,9 +664,11 @@ def list_document_audit_events(
     Non-owners (including other document owners guessing IDs) are denied.
     Never returns file bytes or storage keys. A successful DOCUMENT_VIEW proves
     an authorised preview request, not that a person read or understood the file.
+    Owner self-views remain in the trail; ``focus=external_views`` and summary
+    ``external_*`` fields exclude them from dashboard-style counts.
     """
     try:
-        require_document_owner(
+        document = require_document_owner(
             session,
             user=current_user,
             document_id=document_id,
@@ -667,12 +676,37 @@ def list_document_audit_events(
     except DocumentAuthorizationError as exc:
         raise HTTPException(status_code=exc.status_code, detail=exc.detail) from None
 
+    focus_norm = (focus or "").strip().lower() or None
+    list_action = action
+    list_outcome: str | None = None
+    list_actor_id = None
+    list_exclude_actor_id = None
+    if focus_norm == "external_views":
+        list_action = "DOCUMENT_VIEW"
+        list_outcome = "SUCCESS"
+        list_exclude_actor_id = document.owner_id
+    elif focus_norm == "owner_views":
+        list_action = "DOCUMENT_VIEW"
+        list_actor_id = document.owner_id
+    elif focus_norm == "downloads":
+        list_action = "DOCUMENT_DOWNLOAD"
+    elif focus_norm == "denied":
+        list_outcome = "DENIED"
+    elif focus_norm not in {None, "all"}:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail="focus must be external_views, owner_views, downloads, denied, or all",
+        )
+
     result = list_audit_events(
         session,
         page=page,
         page_size=page_size,
         document_id=document_id,
-        action=action,
+        action=list_action,
+        outcome=list_outcome,
+        actor_id=list_actor_id,
+        exclude_actor_id=list_exclude_actor_id,
     )
     return AuditEventListResponse(
         results=enrich_audit_event_responses(session, result.items),
@@ -680,7 +714,11 @@ def list_document_audit_events(
         page_size=result.page_size,
         total=result.total,
         total_pages=result.total_pages,
-        summary=summarize_document_audit(session, document_id=document_id),
+        summary=summarize_document_audit(
+            session,
+            document_id=document_id,
+            owner_id=document.owner_id,
+        ),
     )
 
 

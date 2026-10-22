@@ -148,8 +148,9 @@ export default function AdminUsersPage() {
           </h1>
           <p className="mt-2 text-sm text-muted">
             Search and inspect registered accounts. Open a profile for activation,
-            role changes, and owner-request review. Account status is Active or
-            Inactive (suspended). New public signups are always Viewers.
+            Viewer/Owner role changes, and owner-request review. Administrator
+            accounts are labelled Admin and cannot be reassigned here. New public
+            signups are always Viewers.
           </p>
         </div>
         <button
@@ -325,7 +326,13 @@ export default function AdminUsersPage() {
                       </p>
                     </td>
                     <td className="px-4 py-3 font-semibold text-foreground">
-                      {row.role}
+                      {row.role === "ADMIN" ? (
+                        <span className="text-accent-strong">Admin</span>
+                      ) : row.role === "OWNER" ? (
+                        "Owner"
+                      ) : (
+                        "Viewer"
+                      )}
                     </td>
                     <td className="px-4 py-3">
                       {row.is_active ? (

@@ -33,6 +33,8 @@ interface AuthContextValue {
   login: (email: string, password: string) => Promise<void>;
   logout: () => void;
   clearError: () => void;
+  /** Reload `/users/me` into context after a profile update. */
+  refreshUser: () => Promise<UserPublic | null>;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -104,6 +106,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setErrorMessage(null);
   }, []);
 
+  const refreshUser = useCallback(async () => {
+    const token = tokenRef.current;
+    if (!token) return null;
+    const profile = await getCurrentUserRequest(token);
+    setUser(profile);
+    return profile;
+  }, []);
+
   const value = useMemo<AuthContextValue>(
     () => ({
       status,
@@ -113,8 +123,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       login,
       logout,
       clearError,
+      refreshUser,
     }),
-    [status, user, accessToken, errorMessage, login, logout, clearError],
+    [
+      status,
+      user,
+      accessToken,
+      errorMessage,
+      login,
+      logout,
+      clearError,
+      refreshUser,
+    ],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

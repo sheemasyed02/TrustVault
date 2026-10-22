@@ -67,11 +67,15 @@ class AdminUserStatusUpdateRequest(BaseModel):
 
 
 class AdminUserRoleUpdateRequest(BaseModel):
-    """Explicit role assignment. Separate from status PATCH (extra=forbid there)."""
+    """Ordinary role assignment via Manage Users.
+
+    Only OWNER or VIEWER are accepted. ADMIN cannot be assigned here; existing
+    administrators are provisioned via bootstrap/seed only.
+    """
 
     model_config = ConfigDict(extra="forbid")
 
-    role: str = Field(..., description="ADMIN, OWNER, or VIEWER")
+    role: str = Field(..., description="OWNER or VIEWER only")
 
 
 class AdminSummaryResponse(BaseModel):

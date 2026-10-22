@@ -183,6 +183,9 @@ def test_authorized_view_creates_event_with_role_snapshot(
     assert audit.status_code == 200
     body = audit.json()
     assert body["summary"]["successful_views"] == 1
+    assert body["summary"]["external_views"] == 1
+    assert body["summary"]["distinct_external_viewers"] == 1
+    assert body["summary"]["owner_self_views"] == 0
     assert body["summary"]["distinct_viewers"] == 1
     assert body["summary"]["latest_view_at"] is not None
     assert body["total"] == 1
@@ -191,6 +194,7 @@ def test_authorized_view_creates_event_with_role_snapshot(
     assert row["outcome"] == "SUCCESS"
     assert row["actor_email"] == "viewer-snap@example.com"
     assert row["metadata"]["actor_role"] == "VIEWER"
+    assert row.get("is_owner_self_view") is False
     # Server-generated timestamp (timezone-aware ISO).
     datetime.fromisoformat(row["created_at"].replace("Z", "+00:00"))
 
@@ -226,7 +230,13 @@ def test_dedupe_window_prevents_double_count_same_preview(
         headers=headers,
         params={"action": "DOCUMENT_VIEW"},
     )
-    assert audit.json()["summary"]["successful_views"] == 1
+    summary = audit.json()["summary"]
+    # Owner self-views remain in the security trail…
+    assert summary["successful_views"] == 1
+    assert summary["owner_self_views"] == 1
+    # …but are excluded from external dashboard counts.
+    assert summary["external_views"] == 0
+    assert summary["distinct_external_viewers"] == 0
     assert VIEW_DEDUPE_SECONDS > 0
 
 
@@ -424,4 +434,63 @@ def test_view_count_matches_successful_records(
     # Filtered list may only include DOCUMENT_VIEW; count SUCCESS among them.
     assert body["summary"]["successful_views"] == 3
     assert body["summary"]["distinct_viewers"] == 2
+    assert body["summary"]["external_views"] == 3
     assert len(success_rows) == 3
+
+
+def test_owner_self_views_excluded_from_external_dashboard(
+    client: TestClient,
+    db_session: Session,
+    auth_settings: Settings,
+):
+    owner = _user(db_session, role="OWNER")
+    viewer = _user(db_session, role="VIEWER")
+    doc = _document(db_session, owner, title="Counted Externally")
+    append_audit_event(
+        db_session,
+        action="DOCUMENT_VIEW",
+        outcome="SUCCESS",
+        actor_id=owner.id,
+        document_id=doc.id,
+    )
+    append_audit_event(
+        db_session,
+        action="DOCUMENT_VIEW",
+        outcome="SUCCESS",
+        actor_id=viewer.id,
+        document_id=doc.id,
+    )
+
+    activity = client.get(
+        "/documents/view-activity",
+        headers=_auth(owner, auth_settings),
+    )
+    assert activity.status_code == 200
+    row = next(
+        r for r in activity.json()["results"] if r["document_id"] == str(doc.id)
+    )
+    assert row["total_views"] == 1
+    assert row["distinct_viewers"] == 1
+    assert activity.json()["summary"]["total_view_events"] >= 1
+
+    audit = client.get(
+        f"/documents/{doc.id}/audit",
+        headers=_auth(owner, auth_settings),
+        params={"focus": "external_views"},
+    )
+    assert audit.status_code == 200
+    body = audit.json()
+    assert body["summary"]["external_views"] == 1
+    assert body["summary"]["owner_self_views"] == 1
+    assert body["total"] == 1
+    assert body["results"][0]["actor_id"] == str(viewer.id)
+
+    own = client.get(
+        f"/documents/{doc.id}/audit",
+        headers=_auth(owner, auth_settings),
+        params={"focus": "owner_views"},
+    )
+    assert own.status_code == 200
+    assert own.json()["total"] == 1
+    assert own.json()["results"][0]["actor_id"] == str(owner.id)
+    assert own.json()["results"][0]["is_owner_self_view"] is True

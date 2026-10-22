@@ -2,13 +2,14 @@
 
 import Link from "next/link";
 import { useEffect, useId, useState, type FormEvent } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 
 import { useAuth } from "@/components/auth-provider";
 import { getPostLoginPath } from "@/lib/nav";
 
 export function LoginEntry() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { status, login, errorMessage, clearError, user } = useAuth();
   const emailId = useId();
   const passwordId = useId();
@@ -17,6 +18,7 @@ export function LoginEntry() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [validationError, setValidationError] = useState<string | null>(null);
+  const passwordChanged = searchParams.get("passwordChanged") === "1";
 
   const isSubmitting = status === "loading";
 
@@ -61,6 +63,15 @@ export function LoginEntry() {
         </Link>
         .
       </p>
+
+      {passwordChanged ? (
+        <p
+          role="status"
+          className="mt-4 rounded-md border border-accent/30 bg-accent-soft/50 px-3 py-2 text-sm text-accent-strong"
+        >
+          Password updated. Sign in with your new password.
+        </p>
+      ) : null}
 
       <form className="mt-6 space-y-4" onSubmit={onSubmit} noValidate>
         <div className="space-y-2">

@@ -13,7 +13,6 @@ import {
   patchAdminUserStatusRequest,
   reviewPromotionRequest,
   type AdminUserProfile,
-  type UserRole,
 } from "@/lib/api";
 import { formatDateTime } from "@/lib/format";
 
@@ -30,6 +29,8 @@ export default function AdminUserProfilePage() {
   const [roleBusy, setRoleBusy] = useState(false);
   const [reviewBusy, setReviewBusy] = useState(false);
   const [confirmStatus, setConfirmStatus] = useState(false);
+
+  const isSelf = user?.id === profile?.id;
 
   const load = useCallback(
     async (signal?: AbortSignal) => {
@@ -69,8 +70,17 @@ export default function AdminUserProfilePage() {
     return () => controller.abort();
   }, [accessToken, load]);
 
-  async function onRoleChange(role: UserRole) {
-    if (!accessToken || !profile || roleBusy || profile.role === role) return;
+  async function onRoleChange(role: "OWNER" | "VIEWER") {
+    if (
+      !accessToken ||
+      !profile ||
+      roleBusy ||
+      profile.role === "ADMIN" ||
+      profile.role === role ||
+      isSelf
+    ) {
+      return;
+    }
     setRoleBusy(true);
     setMessage(null);
     setError(null);
@@ -138,7 +148,6 @@ export default function AdminUserProfilePage() {
     }
   }
 
-  const isSelf = user?.id === profile?.id;
   const pendingPromotion =
     profile?.latest_promotion?.status === "PENDING"
       ? profile.latest_promotion
@@ -319,21 +328,38 @@ export default function AdminUserProfilePage() {
               Manage account
             </h2>
             <div className="mt-4 flex flex-wrap items-end gap-4">
-              <label className="text-sm">
-                <span className="mb-1 block font-medium">Platform role</span>
-                <select
-                  value={profile.role}
-                  disabled={roleBusy}
-                  onChange={(e) =>
-                    void onRoleChange(e.target.value as UserRole)
-                  }
-                  className="rounded-md border border-border bg-white px-3 py-2 text-sm"
-                >
-                  <option value="VIEWER">VIEWER</option>
-                  <option value="OWNER">OWNER</option>
-                  <option value="ADMIN">ADMIN</option>
-                </select>
-              </label>
+              {profile.role === "ADMIN" ? (
+                <div className="text-sm">
+                  <span className="mb-1 block font-medium">Platform role</span>
+                  <p className="rounded-md border border-border bg-accent-soft/40 px-3 py-2 font-semibold text-accent-strong">
+                    ADMIN
+                  </p>
+                  <p className="mt-1 max-w-sm text-xs text-muted">
+                    Administrator accounts are provisioned securely and cannot
+                    be reassigned through Manage Users.
+                  </p>
+                </div>
+              ) : (
+                <label className="text-sm">
+                  <span className="mb-1 block font-medium">Platform role</span>
+                  <select
+                    value={profile.role === "OWNER" ? "OWNER" : "VIEWER"}
+                    disabled={roleBusy || isSelf}
+                    onChange={(e) =>
+                      void onRoleChange(e.target.value as "OWNER" | "VIEWER")
+                    }
+                    className="rounded-md border border-border bg-white px-3 py-2 text-sm"
+                  >
+                    <option value="VIEWER">Viewer</option>
+                    <option value="OWNER">Owner</option>
+                  </select>
+                  {isSelf ? (
+                    <p className="mt-1 text-xs text-muted">
+                      You cannot change your own role.
+                    </p>
+                  ) : null}
+                </label>
+              )}
               <button
                 type="button"
                 disabled={Boolean(isSelf && profile.is_active)}
@@ -349,7 +375,8 @@ export default function AdminUserProfilePage() {
               </button>
             </div>
             <p className="mt-3 text-xs text-muted">
-              Role changes are enforced by the server. The last active
+              Ordinary role changes are Viewer ↔ Owner only and are enforced by
+              the server. Admin cannot be assigned here. The last active
               administrator cannot be deactivated. Passwords and tokens are never
               shown here.
             </p>

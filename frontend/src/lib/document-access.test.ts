@@ -32,9 +32,9 @@ const baseDoc = {
 
 describe("formatDocumentAccessLabel", () => {
   it("distinguishes document access from platform roles", () => {
-    expect(formatDocumentAccessLabel("OWNER")).toBe("Document owner");
-    expect(formatDocumentAccessLabel("EDIT")).toBe("EDIT grant");
-    expect(formatDocumentAccessLabel("READ")).toBe("READ grant");
+    expect(formatDocumentAccessLabel("OWNER")).toBe("Owner");
+    expect(formatDocumentAccessLabel("EDIT")).toBe("Can edit");
+    expect(formatDocumentAccessLabel("READ")).toBe("View only");
   });
 });
 

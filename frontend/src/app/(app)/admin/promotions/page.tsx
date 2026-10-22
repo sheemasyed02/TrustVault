@@ -88,8 +88,8 @@ export default function AdminPromotionsPage() {
           Owner promotion requests
         </h1>
         <p className="mt-2 text-sm text-muted">
-          Approve to grant Owner capabilities without removing the requester’s
-          existing document grants.
+          Approve to grant Owner capabilities (Viewer → Owner only). Approval
+          never assigns Admin. Existing document grants are preserved.
         </p>
       </header>
 

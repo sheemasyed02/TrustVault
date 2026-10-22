@@ -89,16 +89,15 @@ export default function OwnerActivityPage() {
   return (
     <div className="space-y-5">
       <header>
-        <p className="text-sm font-semibold uppercase tracking-[0.18em] text-accent-strong">
+        <p className="text-xs font-semibold uppercase tracking-[0.16em] text-accent-strong">
           Document activity
         </p>
-        <h1 className="mt-2 font-display text-3xl tracking-tight text-foreground">
-          View counts for your documents
+        <h1 className="mt-1.5 font-display text-2xl tracking-tight text-foreground sm:text-3xl">
+          External views of your documents
         </h1>
-        <p className="mt-2 max-w-2xl text-sm text-muted">
-          Each count is a successfully authorised preview request after the
-          server checked permissions. It does not prove someone read or
-          understood the whole file. Downloads are separate.
+        <p className="mt-2 max-w-xl text-sm text-muted">
+          How often others open your files. Your own opens remain in the security
+          trail but are not counted here.
         </p>
       </header>
 
@@ -106,7 +105,7 @@ export default function OwnerActivityPage() {
         <dl className="grid gap-3 sm:grid-cols-2">
           <div className="rounded-xl border border-border bg-surface p-4 shadow-[var(--shadow)]">
             <dt className="text-xs uppercase tracking-wide text-muted">
-              Total authorised view events
+              Total external view events
             </dt>
             <dd className="mt-2 font-display text-3xl text-foreground">
               {summary.total_view_events}
@@ -114,7 +113,7 @@ export default function OwnerActivityPage() {
           </div>
           <div className="rounded-xl border border-border bg-surface p-4 shadow-[var(--shadow)]">
             <dt className="text-xs uppercase tracking-wide text-muted">
-              Documents with views
+              Documents with external views
             </dt>
             <dd className="mt-2 font-display text-3xl text-foreground">
               {summary.documents_with_views}
@@ -165,9 +164,9 @@ export default function OwnerActivityPage() {
             <thead className="border-b border-border text-xs uppercase tracking-wide text-muted">
               <tr>
                 <th className="px-4 py-3 font-semibold">Document</th>
-                <th className="px-4 py-3 font-semibold">Views</th>
-                <th className="px-4 py-3 font-semibold">Distinct viewers</th>
-                <th className="px-4 py-3 font-semibold">Latest view</th>
+                <th className="px-4 py-3 font-semibold">External views</th>
+                <th className="px-4 py-3 font-semibold">Distinct external viewers</th>
+                <th className="px-4 py-3 font-semibold">Latest external view</th>
                 <th className="px-4 py-3 font-semibold">History</th>
               </tr>
             </thead>

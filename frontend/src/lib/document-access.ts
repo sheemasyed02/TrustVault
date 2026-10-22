@@ -16,9 +16,9 @@ export interface DocumentUiAccess {
  * Distinct from platform roles ADMIN / OWNER / VIEWER.
  */
 export function formatDocumentAccessLabel(level: DocumentAccessLevel): string {
-  if (level === "OWNER") return "Document owner";
-  if (level === "EDIT") return "EDIT grant";
-  return "READ grant";
+  if (level === "OWNER") return "Owner";
+  if (level === "EDIT") return "Can edit";
+  return "View only";
 }
 
 /**

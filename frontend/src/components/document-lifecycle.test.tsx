@@ -88,15 +88,13 @@ describe("document lifecycle UI", () => {
     expect(screen.queryByRole("button", { name: /save changes/i })).toBeNull();
   });
 
-  it("hides grant controls for non-owners (EDIT grantee cannot manage sharing)", () => {
-    render(
+  it("hides sharing panel entirely for non-owners", () => {
+    const { container } = render(
       <AuthProvider>
         <DocumentPermissionsPanel documentId={sampleDoc.id} canManage={false} />
       </AuthProvider>,
     );
-    expect(
-      screen.getByText(/only the document owner can grant or revoke/i),
-    ).toBeInTheDocument();
+    expect(container).toBeEmptyDOMElement();
     expect(screen.queryByRole("button", { name: /grant access/i })).toBeNull();
   });
 

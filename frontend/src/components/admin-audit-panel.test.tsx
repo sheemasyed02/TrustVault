@@ -3,6 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import AdminAuditPage from "@/app/(app)/admin/audit/page";
+import AdminAuditIntegrityPage from "@/app/(app)/admin/audit/integrity/page";
 import * as api from "@/lib/api";
 
 vi.mock("next/navigation", () => ({
@@ -27,12 +28,12 @@ vi.mock("@/components/auth-provider", () => ({
   useHandleUnauthorized: () => handleUnauthorized,
 }));
 
-describe("AdminAuditPage", () => {
+describe("AdminAuditLogsPage", () => {
   beforeEach(() => {
     vi.restoreAllMocks();
   });
 
-  it("loads audit events and shows real integrity result", async () => {
+  it("loads audit events without embedding integrity verification", async () => {
     vi.spyOn(api, "listAuditEventsRequest").mockResolvedValue({
       results: [
         {
@@ -55,33 +56,19 @@ describe("AdminAuditPage", () => {
       total: 1,
       total_pages: 1,
     });
-    vi.spyOn(api, "verifyAuditIntegrityRequest").mockResolvedValue({
-      valid: false,
-      event_count: 3,
-      checked_count: 1,
-      first_failure_index: 1,
-      first_failure_event_id: "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb",
-      reason_code: "EVENT_HASH_MISMATCH",
-      detail: "Stored event_hash does not match recalculated hash",
-    });
 
-    const user = userEvent.setup();
     render(<AdminAuditPage />);
 
-    expect(await screen.findByText("LOGIN")).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: /audit logs/i })).toBeInTheDocument();
+    // Desktop table + mobile card both render the action label.
+    expect(screen.getAllByText("LOGIN").length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText("Denied").length).toBeGreaterThanOrEqual(1);
     expect(
-      screen.getAllByText("DENIED").some((el) => el.tagName === "SPAN"),
-    ).toBe(true);
-
-    await user.click(screen.getByRole("button", { name: /Verify chain/i }));
-    await waitFor(() => {
-      expect(screen.getByText(/Chain invalid/i)).toBeInTheDocument();
-    });
+      screen.getByRole("link", { name: /audit integrity/i }),
+    ).toHaveAttribute("href", "/admin/audit/integrity");
     expect(
-      screen.getByText(/Stored event_hash does not match recalculated hash/i),
-    ).toBeInTheDocument();
-    // Must not treat HTTP success as chain validity.
-    expect(screen.queryByText(/^Chain valid$/i)).not.toBeInTheDocument();
+      screen.queryByRole("button", { name: /Verify chain|Run integrity/i }),
+    ).toBeNull();
   });
 
   it("applies outcome and owner filters to the API request", async () => {
@@ -114,5 +101,40 @@ describe("AdminAuditPage", () => {
         expect.anything(),
       );
     });
+  });
+});
+
+describe("AdminAuditIntegrityPage", () => {
+  beforeEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("shows real integrity result and never pretends HTTP success is chain validity", async () => {
+    vi.spyOn(api, "verifyAuditIntegrityRequest").mockResolvedValue({
+      valid: false,
+      event_count: 3,
+      checked_count: 1,
+      first_failure_index: 1,
+      first_failure_event_id: "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb",
+      reason_code: "EVENT_HASH_MISMATCH",
+      detail: "Stored event_hash does not match recalculated hash",
+    });
+
+    const user = userEvent.setup();
+    render(<AdminAuditIntegrityPage />);
+
+    expect(
+      screen.getByText(/No check has run yet/i),
+    ).toBeInTheDocument();
+
+    await user.click(
+      screen.getByRole("button", { name: /Run integrity check/i }),
+    );
+    await waitFor(() => {
+      expect(
+        screen.getByText(/Stored event_hash does not match recalculated hash/i),
+      ).toBeInTheDocument();
+    });
+    expect(screen.queryByText(/^Verified$/i)).not.toBeInTheDocument();
   });
 });

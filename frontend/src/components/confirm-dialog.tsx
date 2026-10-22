@@ -2,6 +2,8 @@
 
 import { useEffect, useId, useRef } from "react";
 
+import { Button } from "@/components/ui/button";
+
 interface ConfirmDialogProps {
   open: boolean;
   title: string;
@@ -43,7 +45,7 @@ export function ConfirmDialog({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+      className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 p-4 sm:items-center"
       role="presentation"
       onMouseDown={(event) => {
         if (event.target === event.currentTarget && !busy) onCancel();
@@ -63,27 +65,26 @@ export function ConfirmDialog({
           {description}
         </p>
         <div className="mt-5 flex flex-wrap justify-end gap-2">
-          <button
+          <Button
             ref={cancelRef}
-            type="button"
+            variant="secondary"
             disabled={busy}
             onClick={onCancel}
-            className="rounded-md border border-border px-3 py-2 text-sm font-semibold disabled:opacity-60"
           >
             {cancelLabel}
-          </button>
-          <button
-            type="button"
+          </Button>
+          <Button
+            variant={danger ? "danger" : "primary"}
             disabled={busy}
             onClick={onConfirm}
-            className={`rounded-md px-3 py-2 text-sm font-semibold text-white disabled:opacity-60 ${
+            className={
               danger
-                ? "bg-danger hover:bg-danger/90"
-                : "bg-accent hover:bg-accent-strong"
-            }`}
+                ? "border-transparent bg-danger text-white hover:bg-danger/90"
+                : undefined
+            }
           >
             {busy ? "Working…" : confirmLabel}
-          </button>
+          </Button>
         </div>
       </div>
     </div>

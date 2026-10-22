@@ -86,17 +86,8 @@ export function DocumentPermissionsPanel({
     })();
   }, [accessToken, canManage, documentId, handleUnauthorized]);
 
-  if (!canManage) {
-    return (
-      <section className="rounded-xl border border-border bg-surface p-5 text-sm text-muted shadow-[var(--shadow)]">
-        <h2 className="font-display text-xl text-foreground">Sharing</h2>
-        <p className="mt-2">
-          Only the document owner can grant or revoke access. Recipients with
-          EDIT cannot manage sharing.
-        </p>
-      </section>
-    );
-  }
+  // Recipients do not need an instructional "you cannot share" panel.
+  if (!canManage) return null;
 
   async function onGrant(event: FormEvent) {
     event.preventDefault();
