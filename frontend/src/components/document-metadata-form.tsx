@@ -77,7 +77,11 @@ export function DocumentMetadataForm({
       aria-label="Edit metadata"
       className="rounded-xl border border-border bg-surface p-5 shadow-[var(--shadow)]"
     >
-      <h2 className="font-display text-xl text-foreground">Edit metadata</h2>
+      <h2 className="font-display text-xl text-foreground">Edit details</h2>
+      <p className="mt-1 text-sm text-muted">
+        Owner-only title, category, and description. Document body editing is
+        separate.
+      </p>
       <p className="mt-1 text-sm text-muted">
         Only title, category, and description can be changed. Owner and EDIT
         grantees may save; READ grants are rejected by the server.

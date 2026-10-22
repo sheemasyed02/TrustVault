@@ -8,6 +8,27 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
 
 
+class AdminPromotionSummary(BaseModel):
+    """Safe owner-promotion request fields for admin profile views."""
+
+    id: UUID
+    status: str
+    justification: str | None = None
+    admin_note: str | None = None
+    created_at: datetime
+    reviewed_at: datetime | None = None
+    reviewed_by: UUID | None = None
+
+
+class AdminUserActivitySummary(BaseModel):
+    """Counts derived from existing tables — never document bytes or storage keys."""
+
+    owned_documents: int = Field(ge=0)
+    active_grants_received: int = Field(ge=0)
+    audit_events_as_actor: int = Field(ge=0)
+    denied_audit_events_as_actor: int = Field(ge=0)
+
+
 class AdminUserSummary(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -18,6 +39,17 @@ class AdminUserSummary(BaseModel):
     is_active: bool
     created_at: datetime
     updated_at: datetime
+    account_status: str = "Active"
+    promotion_request_status: str | None = None
+    promotion_requested_at: datetime | None = None
+    pending_promotion_id: UUID | None = None
+
+
+class AdminUserProfileResponse(AdminUserSummary):
+    """Full admin profile — extends list summary with promotion + activity."""
+
+    latest_promotion: AdminPromotionSummary | None = None
+    activity: AdminUserActivitySummary
 
 
 class AdminUserListResponse(BaseModel):
@@ -32,6 +64,14 @@ class AdminUserStatusUpdateRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     is_active: bool = Field(..., description="Activate or deactivate the account")
+
+
+class AdminUserRoleUpdateRequest(BaseModel):
+    """Explicit role assignment. Separate from status PATCH (extra=forbid there)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    role: str = Field(..., description="ADMIN, OWNER, or VIEWER")
 
 
 class AdminSummaryResponse(BaseModel):

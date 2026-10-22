@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useId, useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 
@@ -54,7 +55,11 @@ export function LoginEntry() {
       </h2>
       <p className="mt-2 text-sm leading-6 text-muted">
         Use your TrustVault account. Access tokens stay in memory for this
-        browser tab — refreshing the page requires signing in again.
+        browser tab — refreshing the page requires signing in again. New here?{" "}
+        <Link href="/signup" className="font-semibold text-accent-strong underline">
+          Create a Viewer account
+        </Link>
+        .
       </p>
 
       <form className="mt-6 space-y-4" onSubmit={onSubmit} noValidate>

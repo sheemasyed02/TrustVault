@@ -26,8 +26,9 @@ from typing import Any
 from sqlalchemy import Select, func, select, text
 from sqlalchemy.orm import Session
 
-from app.db.models import AuditEvent
+from app.db.models import AuditEvent, Document, User
 from app.db.session import get_session_factory
+from app.schemas.audit import AuditEventResponse, DocumentAuditSummary
 
 logger = logging.getLogger(__name__)
 
@@ -474,6 +475,7 @@ def _apply_audit_filters(
     actor_id: uuid.UUID | None,
     action: str | None,
     document_id: uuid.UUID | None,
+    owner_id: uuid.UUID | None,
     outcome: str | None,
     created_from: datetime | None,
     created_to: datetime | None,
@@ -484,6 +486,12 @@ def _apply_audit_filters(
         stmt = stmt.where(AuditEvent.action == action)
     if document_id is not None:
         stmt = stmt.where(AuditEvent.document_id == document_id)
+    if owner_id is not None:
+        # Join document metadata only — never loads file bytes or storage keys.
+        stmt = stmt.join(
+            Document,
+            Document.id == AuditEvent.document_id,
+        ).where(Document.owner_id == owner_id)
     if outcome is not None:
         stmt = stmt.where(AuditEvent.outcome == outcome)
     if created_from is not None:
@@ -501,6 +509,7 @@ def list_audit_events(
     actor_id: uuid.UUID | None = None,
     action: str | None = None,
     document_id: uuid.UUID | None = None,
+    owner_id: uuid.UUID | None = None,
     outcome: str | None = None,
     created_from: datetime | None = None,
     created_to: datetime | None = None,
@@ -518,6 +527,7 @@ def list_audit_events(
         actor_id=actor_id,
         action=action,
         document_id=document_id,
+        owner_id=owner_id,
         outcome=outcome,
         created_from=created_from,
         created_to=created_to,
@@ -540,3 +550,135 @@ def list_audit_events(
         total=total,
         total_pages=total_pages,
     )
+
+
+def _count_document_events(
+    session: Session,
+    *,
+    document_id: uuid.UUID,
+    action: str | None = None,
+    outcome: str | None = None,
+) -> int:
+    stmt = (
+        select(func.count())
+        .select_from(AuditEvent)
+        .where(AuditEvent.document_id == document_id)
+    )
+    if action is not None:
+        stmt = stmt.where(AuditEvent.action == action)
+    if outcome is not None:
+        stmt = stmt.where(AuditEvent.outcome == outcome)
+    return session.scalar(stmt) or 0
+
+
+def summarize_document_audit(
+    session: Session,
+    *,
+    document_id: uuid.UUID,
+) -> DocumentAuditSummary:
+    """Aggregate counts for the owner document activity dashboard."""
+    from app.services.document_view_audit import document_view_stats
+
+    views, distinct, latest = document_view_stats(session, document_id=document_id)
+    return DocumentAuditSummary(
+        successful_views=views,
+        distinct_viewers=distinct,
+        latest_view_at=latest,
+        successful_downloads=_count_document_events(
+            session,
+            document_id=document_id,
+            action="DOCUMENT_DOWNLOAD",
+            outcome="SUCCESS",
+        ),
+        denied_access_attempts=_count_document_events(
+            session,
+            document_id=document_id,
+            outcome="DENIED",
+        ),
+        permission_grants=_count_document_events(
+            session,
+            document_id=document_id,
+            action="DOCUMENT_PERMISSION_GRANT",
+            outcome="SUCCESS",
+        ),
+        permission_revocations=_count_document_events(
+            session,
+            document_id=document_id,
+            action="DOCUMENT_PERMISSION_REVOKE",
+            outcome="SUCCESS",
+        ),
+        content_updates=_count_document_events(
+            session,
+            document_id=document_id,
+            action="DOCUMENT_CONTENT_UPDATE",
+            outcome="SUCCESS",
+        ),
+        metadata_updates=_count_document_events(
+            session,
+            document_id=document_id,
+            action="DOCUMENT_METADATA_UPDATE",
+            outcome="SUCCESS",
+        ),
+        uploads=_count_document_events(
+            session,
+            document_id=document_id,
+            action="DOCUMENT_UPLOAD",
+            outcome="SUCCESS",
+        ),
+        deletions=_count_document_events(
+            session,
+            document_id=document_id,
+            action="DOCUMENT_DELETE",
+            outcome="SUCCESS",
+        ),
+    )
+
+
+def enrich_audit_event_responses(
+    session: Session,
+    events: list[AuditEvent],
+) -> list[AuditEventResponse]:
+    """Attach safe actor/target display names when those users still exist."""
+    user_ids: set[uuid.UUID] = set()
+    for event in events:
+        if event.actor_id is not None:
+            user_ids.add(event.actor_id)
+        if event.target_user_id is not None:
+            user_ids.add(event.target_user_id)
+
+    users_by_id: dict[uuid.UUID, User] = {}
+    if user_ids:
+        users_by_id = {
+            user.id: user
+            for user in session.scalars(
+                select(User).where(User.id.in_(user_ids))
+            ).all()
+        }
+
+    results: list[AuditEventResponse] = []
+    for event in events:
+        actor = users_by_id.get(event.actor_id) if event.actor_id else None
+        target = (
+            users_by_id.get(event.target_user_id) if event.target_user_id else None
+        )
+        results.append(
+            AuditEventResponse(
+                id=event.id,
+                created_at=event.created_at,
+                actor_id=event.actor_id,
+                actor_name=actor.name if actor else None,
+                actor_email=actor.email if actor else None,
+                action=event.action,
+                document_id=event.document_id,
+                target_user_id=event.target_user_id,
+                target_user_name=target.name if target else None,
+                target_user_email=target.email if target else None,
+                outcome=event.outcome,
+                reason_code=event.reason_code,
+                request_id=event.request_id,
+                metadata=dict(event.metadata_json or {}),
+                previous_hash=event.previous_hash,
+                event_hash=event.event_hash,
+            )
+        )
+    return results

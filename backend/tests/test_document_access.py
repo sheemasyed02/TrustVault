@@ -631,7 +631,7 @@ def test_r2_missing_object_handled_safely(
     assert "storage_key" not in response.text
     assert doc.storage_key not in response.text
     assert any(
-        e["action"] == "DOCUMENT_DOWNLOAD" and e["outcome"] == "FAILURE"
+        e["action"] == "DOCUMENT_DOWNLOAD" and e["outcome"] == "DENIED"
         for e in audit_hook.events
     )
 

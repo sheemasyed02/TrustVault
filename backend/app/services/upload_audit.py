@@ -22,6 +22,19 @@ from app.services.audit_trail import (
 logger = logging.getLogger(__name__)
 
 
+def _merge_metadata(
+    *,
+    changed_fields: list[str] | None,
+    metadata: dict | None,
+) -> dict | None:
+    merged: dict = {}
+    if metadata:
+        merged.update(metadata)
+    if changed_fields is not None:
+        merged["changed_fields"] = list(changed_fields)
+    return merged or None
+
+
 class UploadAuditHook(Protocol):
     def record(
         self,
@@ -34,6 +47,7 @@ class UploadAuditHook(Protocol):
         target_user_id: uuid.UUID | None = None,
         request_id: str | None = None,
         changed_fields: list[str] | None = None,
+        metadata: dict | None = None,
     ) -> None: ...
 
 
@@ -51,6 +65,7 @@ class NullUploadAuditHook:
         target_user_id: uuid.UUID | None = None,
         request_id: str | None = None,
         changed_fields: list[str] | None = None,
+        metadata: dict | None = None,
     ) -> None:
         logger.info(
             "Document audit event (not persisted)",
@@ -59,6 +74,7 @@ class NullUploadAuditHook:
                 "audit_outcome": outcome,
                 "audit_reason": reason_code,
                 "audit_changed_fields": changed_fields,
+                "audit_metadata_keys": list((metadata or {}).keys()),
                 "audit_persisted": False,
             },
         )
@@ -81,6 +97,7 @@ class RecordingUploadAuditHook:
         target_user_id: uuid.UUID | None = None,
         request_id: str | None = None,
         changed_fields: list[str] | None = None,
+        metadata: dict | None = None,
     ) -> None:
         self.events.append(
             {
@@ -92,6 +109,7 @@ class RecordingUploadAuditHook:
                 "target_user_id": target_user_id,
                 "request_id": request_id,
                 "changed_fields": changed_fields,
+                "metadata": dict(metadata) if metadata else {},
                 "persisted": False,
             }
         )
@@ -111,6 +129,7 @@ class FailingUploadAuditHook:
         target_user_id: uuid.UUID | None = None,
         request_id: str | None = None,
         changed_fields: list[str] | None = None,
+        metadata: dict | None = None,
     ) -> None:
         raise RuntimeError("Audit backend unavailable")
 
@@ -139,12 +158,9 @@ class DurableAuditHook:
         target_user_id: uuid.UUID | None = None,
         request_id: str | None = None,
         changed_fields: list[str] | None = None,
+        metadata: dict | None = None,
     ) -> None:
-        metadata = (
-            {"changed_fields": list(changed_fields)}
-            if changed_fields is not None
-            else None
-        )
+        merged = _merge_metadata(changed_fields=changed_fields, metadata=metadata)
         try:
             if outcome == "DENIED":
                 append_audit_event_committed(
@@ -155,7 +171,7 @@ class DurableAuditHook:
                     target_user_id=target_user_id,
                     reason_code=reason_code,
                     request_id=request_id,
-                    metadata=metadata,
+                    metadata=merged,
                 )
                 return
 
@@ -168,7 +184,7 @@ class DurableAuditHook:
                     target_user_id=target_user_id,
                     reason_code=reason_code,
                     request_id=request_id,
-                    metadata=metadata,
+                    metadata=merged,
                 )
                 return
 
@@ -181,7 +197,7 @@ class DurableAuditHook:
                 target_user_id=target_user_id,
                 reason_code=reason_code,
                 request_id=request_id,
-                metadata=metadata,
+                metadata=merged,
             )
         except AuditTrailError:
             logger.exception(

@@ -60,6 +60,7 @@ def _safe_audit(
     document_id: uuid.UUID | None,
     target_user_id: uuid.UUID | None,
     request_id: str | None,
+    metadata: dict | None = None,
 ) -> None:
     """Best-effort denial audit; never hide the original denial if audit fails."""
     try:
@@ -72,6 +73,7 @@ def _safe_audit(
             document_id=document_id,
             target_user_id=target_user_id,
             request_id=request_id,
+            metadata=metadata,
         )
     except Exception:
         logger.exception(
@@ -167,6 +169,7 @@ def create_permission(
     rejected via schema extra=forbid / ignored (not accepted).
     """
     request_id = (x_request_id or str(uuid.uuid4())).strip() or str(uuid.uuid4())
+    grant_meta = {"permission": body.permission}
     try:
         result = grant_document_permission(
             session,
@@ -185,6 +188,7 @@ def create_permission(
             document_id=document_id,
             target_user_id=body.user_id,
             request_id=request_id,
+            metadata=grant_meta,
         )
         raise HTTPException(status_code=exc.status_code, detail=exc.detail) from None
     except DocumentSharingError as exc:
@@ -197,10 +201,16 @@ def create_permission(
             document_id=document_id,
             target_user_id=body.user_id,
             request_id=request_id,
+            metadata=grant_meta,
         )
         raise HTTPException(status_code=exc.status_code, detail=exc.message) from None
 
-    reason = "REGRANTED" if result.regranted else None
+    if result.permission_changed:
+        reason = "PERMISSION_CHANGED"
+    elif result.regranted:
+        reason = "REGRANTED"
+    else:
+        reason = None
     try:
         audit_sharing_event(
             audit,
@@ -211,6 +221,7 @@ def create_permission(
             document_id=document_id,
             target_user_id=body.user_id,
             request_id=request_id,
+            metadata=grant_meta,
         )
     except Exception as exc:
         # Undo only this grant — do not claim success if audit could not run.
@@ -278,6 +289,7 @@ def delete_permission(
     assert grant.revoked_at is not None
     revoked_at = grant.revoked_at
     permission_value = grant.permission
+    revoke_meta = {"permission": permission_value}
     try:
         audit_sharing_event(
             audit,
@@ -288,6 +300,7 @@ def delete_permission(
             document_id=document_id,
             target_user_id=user_id,
             request_id=request_id,
+            metadata=revoke_meta,
         )
     except Exception as exc:
         grant.revoked_at = None

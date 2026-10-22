@@ -11,7 +11,7 @@ from sqlalchemy import select
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session, joinedload
 
-from app.db.models import Document, DocumentPermission, User
+from app.db.models import Document, User
 from app.services.document_authorization import (
     DocumentAction,
     DocumentAuthorizationError,
@@ -49,13 +49,15 @@ def update_document_metadata(
     document_id: uuid.UUID,
     fields: dict,
 ) -> MetadataUpdateResult:
-    """Apply a partial metadata update after re-checking EDIT authorization.
+    """Apply a partial metadata update after re-checking owner-only authorization.
 
-    Transaction policy: the document row is locked with FOR UPDATE, then edit
-    authorization is re-evaluated against current grants. A revoke committed
-    before this transaction's grant check will deny the edit. Concurrent revoke
-    after the check but before commit remains a small residual race under
-    READ COMMITTED (documented; not claimed as fully eliminated).
+    Only the document owner may change title, category, or description.
+    EDIT grants do not permit metadata changes. Protected fields (owner_id,
+    storage_key, timestamps, etc.) are rejected.
+
+    Transaction policy: the document row is locked with FOR UPDATE, then
+    ownership is re-evaluated. Concurrent ownership changes are not supported
+    (owner_id is immutable via normal APIs).
     """
     reject_protected_metadata_fields(fields)
 
@@ -87,37 +89,13 @@ def update_document_metadata(
             reason_code="DOCUMENT_MISSING_OR_DELETED",
         )
 
-    # Re-check edit rights after the row lock (current grant state).
+    # Owner-only: EDIT_METADATA is not granted to READ/EDIT recipients.
     evaluate_document_access(
         session,
         user=actor,
         document_id=document_id,
         action=DocumentAction.EDIT_METADATA,
     )
-
-    # If the actor is not the owner, lock their active grant row as well.
-    if locked.owner_id != actor.id:
-        try:
-            session.scalars(
-                select(DocumentPermission).where(
-                    DocumentPermission.document_id == locked.id,
-                    DocumentPermission.user_id == actor.id,
-                    DocumentPermission.revoked_at.is_(None),
-                ).with_for_update()
-            ).one_or_none()
-        except SQLAlchemyError as exc:
-            raise DocumentMetadataError(
-                "Unable to update document",
-                status_code=503,
-                reason_code="GRANT_LOCK_FAILED",
-            ) from exc
-        # Re-evaluate after grant lock in case of concurrent revoke.
-        evaluate_document_access(
-            session,
-            user=actor,
-            document_id=document_id,
-            action=DocumentAction.EDIT_METADATA,
-        )
 
     changed: list[str] = []
     try:

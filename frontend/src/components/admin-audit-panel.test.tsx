@@ -84,7 +84,7 @@ describe("AdminAuditPage", () => {
     expect(screen.queryByText(/^Chain valid$/i)).not.toBeInTheDocument();
   });
 
-  it("applies outcome filter to the API request", async () => {
+  it("applies outcome and owner filters to the API request", async () => {
     const listSpy = vi.spyOn(api, "listAuditEventsRequest").mockResolvedValue({
       results: [],
       page: 1,
@@ -98,12 +98,19 @@ describe("AdminAuditPage", () => {
     await screen.findByText(/No audit events match/i);
 
     await user.selectOptions(screen.getByDisplayValue("Any"), "DENIED");
+    await user.type(
+      screen.getByPlaceholderText(/Document owner UUID/i),
+      "00000000-0000-0000-0000-000000000010",
+    );
     await user.click(screen.getByRole("button", { name: /Apply filters/i }));
 
     await waitFor(() => {
       expect(listSpy).toHaveBeenCalledWith(
         "tok",
-        expect.objectContaining({ outcome: "DENIED" }),
+        expect.objectContaining({
+          outcome: "DENIED",
+          owner_id: "00000000-0000-0000-0000-000000000010",
+        }),
         expect.anything(),
       );
     });

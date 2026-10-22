@@ -63,6 +63,10 @@ describe("AdminUsersPage", () => {
 
     expect(await screen.findByText("viewer@example.com")).toBeInTheDocument();
     expect(api.listAdminUsersRequest).toHaveBeenCalled();
+    expect(screen.getByRole("link", { name: /View profile/i })).toHaveAttribute(
+      "href",
+      "/admin/users/11111111-1111-1111-1111-111111111111",
+    );
 
     await user.click(screen.getByRole("button", { name: /^Deactivate$/i }));
     expect(screen.getByRole("alertdialog")).toHaveTextContent(
@@ -91,6 +95,8 @@ describe("AdminUsersPage", () => {
     expect(await screen.findByRole("alert")).toHaveTextContent(
       /Service unavailable/i,
     );
-    expect(screen.queryByText(/@example.com/)).not.toBeInTheDocument();
+    // Help text may mention @example.com fixtures; the table must stay empty.
+    expect(screen.queryByRole("table")).not.toBeInTheDocument();
+    expect(screen.queryByText("viewer@example.com")).not.toBeInTheDocument();
   });
 });

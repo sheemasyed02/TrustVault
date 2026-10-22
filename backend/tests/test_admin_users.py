@@ -108,7 +108,8 @@ def test_admin_lists_safe_user_fields_only(
     auth_settings: Settings,
 ):
     admin = _user(db_session, role="ADMIN")
-    _user(db_session, role="VIEWER", email=f"viewer-{uuid.uuid4()}@example.com")
+    viewer_email = f"viewer-{uuid.uuid4()}@example.com"
+    _user(db_session, role="VIEWER", email=viewer_email)
     resp = client.get("/admin/users", headers=_auth(admin, auth_settings))
     assert resp.status_code == 200
     body = resp.json()
@@ -125,7 +126,67 @@ def test_admin_lists_safe_user_fields_only(
             "is_active",
             "created_at",
             "updated_at",
+            "account_status",
         }
+
+    filtered = client.get(
+        "/admin/users",
+        headers=_auth(admin, auth_settings),
+        params={"q": viewer_email, "role": "VIEWER", "is_active": True},
+    )
+    assert filtered.status_code == 200
+    assert filtered.json()["total"] >= 1
+    assert all(row["role"] == "VIEWER" for row in filtered.json()["results"])
+    assert all(row["is_active"] is True for row in filtered.json()["results"])
+
+
+def test_admin_user_profile_and_non_admin_denied(
+    client: TestClient,
+    db_session: Session,
+    auth_settings: Settings,
+):
+    admin = _user(db_session, role="ADMIN")
+    viewer = _user(db_session, role="VIEWER", email=f"profile-{uuid.uuid4()}@example.com")
+    owner = _user(db_session, role="OWNER")
+
+    profile = client.get(
+        f"/admin/users/{viewer.id}",
+        headers=_auth(admin, auth_settings),
+    )
+    assert profile.status_code == 200
+    body = profile.json()
+    assert body["id"] == str(viewer.id)
+    assert body["email"] == viewer.email
+    assert body["role"] == "VIEWER"
+    assert body["account_status"] == "Active"
+    assert "activity" in body
+    assert body["activity"]["owned_documents"] == 0
+    assert "password" not in body
+    assert "password_hash" not in body
+    assert "access_token" not in body
+    assert "storage_key" not in body
+
+    missing = client.get(
+        f"/admin/users/{uuid.uuid4()}",
+        headers=_auth(admin, auth_settings),
+    )
+    assert missing.status_code == 404
+
+    assert (
+        client.get(
+            f"/admin/users/{viewer.id}",
+            headers=_auth(viewer, auth_settings),
+        ).status_code
+        == 403
+    )
+    assert (
+        client.get(
+            f"/admin/users/{admin.id}",
+            headers=_auth(owner, auth_settings),
+        ).status_code
+        == 403
+    )
+    assert client.get("/admin/users", headers=_auth(viewer, auth_settings)).status_code == 403
 
 
 def test_admin_can_deactivate_and_disabled_user_blocked(

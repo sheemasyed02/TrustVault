@@ -42,6 +42,7 @@ export function DocumentPermissionsPanel({
   const [selectedUser, setSelectedUser] = useState<UserSearchHit | null>(null);
   const [permission, setPermission] = useState<DocumentPermissionLevel>("READ");
   const [granting, setGranting] = useState(false);
+  const [changingUserId, setChangingUserId] = useState<string | null>(null);
 
   const [revokeTarget, setRevokeTarget] = useState<PermissionGrant | null>(null);
   const [revoking, setRevoking] = useState(false);
@@ -90,8 +91,8 @@ export function DocumentPermissionsPanel({
       <section className="rounded-xl border border-border bg-surface p-5 text-sm text-muted shadow-[var(--shadow)]">
         <h2 className="font-display text-xl text-foreground">Sharing</h2>
         <p className="mt-2">
-          Only the document owner can grant or revoke access. EDIT grantees
-          cannot manage sharing.
+          Only the document owner can grant or revoke access. Recipients with
+          EDIT cannot manage sharing.
         </p>
       </section>
     );
@@ -104,13 +105,13 @@ export function DocumentPermissionsPanel({
       setError("Select a registered recipient from search results.");
       return;
     }
-    setGranting(true);
-    setError(null);
-    setMessage(null);
     if (ownerUserId && selectedUser.id === ownerUserId) {
       setError("Cannot grant access to the document owner.");
       return;
     }
+    setGranting(true);
+    setError(null);
+    setMessage(null);
     try {
       await grantDocumentPermissionRequest(accessToken, documentId, {
         user_id: selectedUser.id,
@@ -125,10 +126,9 @@ export function DocumentPermissionsPanel({
       if (handleUnauthorized(err)) return;
       const detail =
         err instanceof ApiError ? err.detail : "Grant failed.";
-      // Surface common backend messages clearly for owners.
       if (/already exists/i.test(detail)) {
         setError(
-          `${selectedUser.name} already has an active grant. Revoke it first or choose another user.`,
+          `${selectedUser.name} already has this permission. Use Change on their row to switch READ ↔ EDIT.`,
         );
       } else if (/owner/i.test(detail)) {
         setError("Cannot grant access to the document owner.");
@@ -141,6 +141,33 @@ export function DocumentPermissionsPanel({
       }
     } finally {
       setGranting(false);
+    }
+  }
+
+  async function changePermission(
+    grant: PermissionGrant,
+    next: DocumentPermissionLevel,
+  ) {
+    if (!accessToken || changingUserId || grant.permission === next) return;
+    setChangingUserId(grant.user.id);
+    setError(null);
+    setMessage(null);
+    try {
+      await grantDocumentPermissionRequest(accessToken, documentId, {
+        user_id: grant.user.id,
+        permission: next,
+      });
+      setMessage(
+        `Updated ${grant.user.name} from ${grant.permission} to ${next}.`,
+      );
+      await loadGrants();
+    } catch (err) {
+      if (handleUnauthorized(err)) return;
+      setError(
+        err instanceof ApiError ? err.detail : "Unable to change permission.",
+      );
+    } finally {
+      setChangingUserId(null);
     }
   }
 
@@ -176,13 +203,13 @@ export function DocumentPermissionsPanel({
     >
       <h2 className="font-display text-xl text-foreground">Sharing</h2>
       <p className="mt-1 text-sm text-muted">
-        <strong className="font-semibold text-foreground">READ</strong> and{" "}
-        <strong className="font-semibold text-foreground">EDIT</strong> are
-        per-document grants — they do not change the recipient&apos;s platform
-        role (ADMIN / OWNER / VIEWER). READ allows viewing and download; EDIT
-        also allows metadata changes. Only you (the document owner) can share
-        or revoke. Revocation blocks the next server request; copies already
-        downloaded locally are outside TrustVault control.
+        <strong className="font-semibold text-foreground">READ</strong> allows
+        preview and download.{" "}
+        <strong className="font-semibold text-foreground">EDIT</strong> also
+        allows supported content editing (DOCX text). Metadata, delete, and
+        sharing stay owner-only. Grants never change platform roles. Revocation
+        blocks the next server request; copies already downloaded locally are
+        outside TrustVault control.
       </p>
 
       <form
@@ -215,7 +242,12 @@ export function DocumentPermissionsPanel({
           <button
             type="submit"
             disabled={granting || !selectedUser}
-            className="w-full rounded-md bg-accent px-4 py-2 text-sm font-semibold text-white hover:bg-accent-strong disabled:opacity-60"
+            title={
+              !selectedUser
+                ? "Select a recipient from search results first"
+                : undefined
+            }
+            className="w-full rounded-md bg-accent px-4 py-2 text-sm font-semibold text-white hover:bg-accent-strong disabled:cursor-not-allowed disabled:opacity-60"
           >
             {granting ? "Granting…" : "Grant access"}
           </button>
@@ -239,44 +271,72 @@ export function DocumentPermissionsPanel({
         </p>
       ) : null}
 
+      {status === "error" ? (
+        <button
+          type="button"
+          onClick={() => void loadGrants()}
+          className="mt-4 text-sm font-semibold text-danger underline"
+        >
+          Retry loading grants
+        </button>
+      ) : null}
+
       {status === "ready" && grants.length === 0 ? (
-        <p className="mt-4 text-sm text-muted">No active grants.</p>
+        <p className="mt-4 text-sm text-muted">
+          No active grants. Search for a registered user to share this document.
+        </p>
       ) : null}
 
       {status === "ready" && grants.length > 0 ? (
         <ul className="mt-4 divide-y divide-border rounded-lg border border-border">
-          {grants.map((grant) => (
-            <li
-              key={grant.id}
-              className="flex flex-wrap items-center justify-between gap-3 px-3 py-3 text-sm"
-            >
-              <div>
-                <p className="font-medium text-foreground">
-                  {grant.user.name}{" "}
-                  <span
-                    className={`ml-2 rounded px-1.5 py-0.5 text-xs font-semibold ${
-                      grant.permission === "EDIT"
-                        ? "bg-accent-soft text-accent-strong"
-                        : "bg-white text-muted"
-                    }`}
-                  >
-                    {grant.permission}
-                  </span>
-                </p>
-                <p className="text-xs text-muted">
-                  {grant.user.email} · since {formatDateTime(grant.granted_at)}
-                  {grant.regranted ? " · regranted" : ""}
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={() => setRevokeTarget(grant)}
-                className="rounded-md border border-danger/40 px-3 py-1.5 text-xs font-semibold text-danger"
+          {grants.map((grant) => {
+            const nextLevel: DocumentPermissionLevel =
+              grant.permission === "READ" ? "EDIT" : "READ";
+            const changing = changingUserId === grant.user.id;
+            return (
+              <li
+                key={grant.id}
+                className="flex flex-wrap items-center justify-between gap-3 px-3 py-3 text-sm"
               >
-                Revoke
-              </button>
-            </li>
-          ))}
+                <div>
+                  <p className="font-medium text-foreground">
+                    {grant.user.name}{" "}
+                    <span
+                      className={`ml-2 rounded px-1.5 py-0.5 text-xs font-semibold ${
+                        grant.permission === "EDIT"
+                          ? "bg-accent-soft text-accent-strong"
+                          : "bg-white text-muted"
+                      }`}
+                    >
+                      {grant.permission}
+                    </span>
+                  </p>
+                  <p className="text-xs text-muted">
+                    {grant.user.email} · since {formatDateTime(grant.granted_at)}
+                    {grant.regranted ? " · regranted" : ""}
+                  </p>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    disabled={changing || revoking}
+                    onClick={() => void changePermission(grant, nextLevel)}
+                    className="rounded-md border border-border px-3 py-1.5 text-xs font-semibold hover:bg-accent-soft disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    {changing ? "Updating…" : `Change to ${nextLevel}`}
+                  </button>
+                  <button
+                    type="button"
+                    disabled={changing || revoking}
+                    onClick={() => setRevokeTarget(grant)}
+                    className="rounded-md border border-danger/40 px-3 py-1.5 text-xs font-semibold text-danger disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    Revoke
+                  </button>
+                </div>
+              </li>
+            );
+          })}
         </ul>
       ) : null}
 

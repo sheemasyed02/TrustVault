@@ -247,6 +247,206 @@ export async function loginRequest(
   });
 }
 
+export interface RegisterResponse {
+  id: string;
+  name: string;
+  email: string;
+  role: string;
+  message: string;
+}
+
+export async function registerRequest(
+  body: { name: string; email: string; password: string },
+  signal?: AbortSignal,
+): Promise<RegisterResponse> {
+  return apiRequest<RegisterResponse>("/auth/register", {
+    method: "POST",
+    body,
+    signal,
+  });
+}
+
+export interface PromotionRequestItem {
+  id: string;
+  requester_id: string;
+  status: string;
+  justification: string | null;
+  admin_note: string | null;
+  reviewed_by: string | null;
+  created_at: string;
+  reviewed_at: string | null;
+  requester?: {
+    id: string;
+    name: string;
+    email: string;
+    role: string;
+  } | null;
+}
+
+export interface PromotionListResponse {
+  results: PromotionRequestItem[];
+  page: number;
+  page_size: number;
+  total: number;
+  total_pages: number;
+}
+
+export async function submitPromotionRequest(
+  token: string,
+  justification?: string,
+  signal?: AbortSignal,
+): Promise<PromotionRequestItem> {
+  return apiRequest<PromotionRequestItem>("/promotions/requests", {
+    method: "POST",
+    token,
+    body: { justification: justification || null },
+    signal,
+  });
+}
+
+export async function listMyPromotionRequests(
+  token: string,
+  signal?: AbortSignal,
+): Promise<PromotionRequestItem[]> {
+  return apiRequest<PromotionRequestItem[]>("/promotions/requests/me", {
+    token,
+    signal,
+  });
+}
+
+export async function listAdminPromotionsRequest(
+  token: string,
+  params: { status?: string; page?: number; page_size?: number } = {},
+  signal?: AbortSignal,
+): Promise<PromotionListResponse> {
+  const query = buildQuery({
+    status: params.status,
+    page: params.page,
+    page_size: params.page_size,
+  });
+  return apiRequest<PromotionListResponse>(`/admin/promotions${query}`, {
+    token,
+    signal,
+  });
+}
+
+export async function reviewPromotionRequest(
+  token: string,
+  requestId: string,
+  body: { decision: "APPROVED" | "REJECTED"; admin_note?: string },
+  signal?: AbortSignal,
+): Promise<PromotionRequestItem> {
+  return apiRequest<PromotionRequestItem>(
+    `/admin/promotions/${requestId}/review`,
+    {
+      method: "POST",
+      token,
+      body,
+      signal,
+    },
+  );
+}
+
+export async function patchAdminUserRoleRequest(
+  token: string,
+  userId: string,
+  role: UserRole,
+  signal?: AbortSignal,
+): Promise<AdminUserSummary> {
+  return apiRequest<AdminUserSummary>(`/admin/users/${userId}/role`, {
+    method: "PATCH",
+    token,
+    body: { role },
+    signal,
+  });
+}
+
+export async function listDocumentAuditRequest(
+  token: string,
+  documentId: string,
+  params: { page?: number; page_size?: number; action?: string } = {},
+  signal?: AbortSignal,
+): Promise<AuditEventListResponse> {
+  const query = buildQuery({
+    page: params.page,
+    page_size: params.page_size,
+    action: params.action,
+  });
+  return apiRequest<AuditEventListResponse>(
+    `/documents/${documentId}/audit${query}`,
+    { token, signal },
+  );
+}
+
+export interface DocumentViewActivityItem {
+  document_id: string;
+  title: string;
+  owner_id: string;
+  owner_name: string;
+  owner_email: string;
+  total_views: number;
+  distinct_viewers: number;
+  latest_view_at: string | null;
+}
+
+export interface DocumentViewPlatformSummary {
+  total_view_events: number;
+  documents_with_views: number;
+  most_viewed: DocumentViewActivityItem[];
+}
+
+export interface DocumentViewActivityListResponse {
+  results: DocumentViewActivityItem[];
+  page: number;
+  page_size: number;
+  total: number;
+  total_pages: number;
+  summary?: DocumentViewPlatformSummary | null;
+}
+
+export async function listOwnerDocumentViewActivityRequest(
+  token: string,
+  params: { page?: number; page_size?: number } = {},
+  signal?: AbortSignal,
+): Promise<DocumentViewActivityListResponse> {
+  const query = buildQuery({
+    page: params.page,
+    page_size: params.page_size,
+  });
+  return apiRequest<DocumentViewActivityListResponse>(
+    `/documents/view-activity${query}`,
+    { token, signal },
+  );
+}
+
+export async function listAdminDocumentViewsRequest(
+  token: string,
+  params: {
+    page?: number;
+    page_size?: number;
+    q?: string;
+    owner_id?: string;
+    viewer_id?: string;
+    created_from?: string;
+    created_to?: string;
+  } = {},
+  signal?: AbortSignal,
+): Promise<DocumentViewActivityListResponse> {
+  const query = buildQuery({
+    page: params.page,
+    page_size: params.page_size,
+    q: params.q,
+    owner_id: params.owner_id,
+    viewer_id: params.viewer_id,
+    created_from: params.created_from,
+    created_to: params.created_to,
+  });
+  return apiRequest<DocumentViewActivityListResponse>(
+    `/admin/audit/document-views${query}`,
+    { token, signal },
+  );
+}
+
 export async function getCurrentUserRequest(
   token: string,
   signal?: AbortSignal,
@@ -684,6 +884,32 @@ export interface AdminUserSummary {
   is_active: boolean;
   created_at: string;
   updated_at: string;
+  account_status?: string;
+  promotion_request_status?: string | null;
+  promotion_requested_at?: string | null;
+  pending_promotion_id?: string | null;
+}
+
+export interface AdminPromotionSummary {
+  id: string;
+  status: string;
+  justification: string | null;
+  admin_note: string | null;
+  created_at: string;
+  reviewed_at: string | null;
+  reviewed_by: string | null;
+}
+
+export interface AdminUserActivitySummary {
+  owned_documents: number;
+  active_grants_received: number;
+  audit_events_as_actor: number;
+  denied_audit_events_as_actor: number;
+}
+
+export interface AdminUserProfile extends AdminUserSummary {
+  latest_promotion: AdminPromotionSummary | null;
+  activity: AdminUserActivitySummary;
 }
 
 export interface AdminUserListResponse {
@@ -692,6 +918,15 @@ export interface AdminUserListResponse {
   page_size: number;
   total: number;
   total_pages: number;
+}
+
+export interface AdminUserListParams {
+  page?: number;
+  page_size?: number;
+  q?: string;
+  role?: UserRole | "";
+  is_active?: boolean | "";
+  promotion_status?: "PENDING" | "APPROVED" | "REJECTED" | "NONE" | "";
 }
 
 export interface AdminSummaryResponse {
@@ -706,9 +941,13 @@ export interface AuditEventItem {
   id: string;
   created_at: string;
   actor_id: string | null;
+  actor_name?: string | null;
+  actor_email?: string | null;
   action: string;
   document_id: string | null;
   target_user_id: string | null;
+  target_user_name?: string | null;
+  target_user_email?: string | null;
   outcome: "SUCCESS" | "DENIED" | string;
   reason_code: string | null;
   request_id: string | null;
@@ -717,12 +956,27 @@ export interface AuditEventItem {
   event_hash: string;
 }
 
+export interface DocumentAuditSummary {
+  successful_views: number;
+  distinct_viewers?: number;
+  latest_view_at?: string | null;
+  successful_downloads: number;
+  denied_access_attempts: number;
+  permission_grants: number;
+  permission_revocations: number;
+  content_updates: number;
+  metadata_updates: number;
+  uploads: number;
+  deletions: number;
+}
+
 export interface AuditEventListResponse {
   results: AuditEventItem[];
   page: number;
   page_size: number;
   total: number;
   total_pages: number;
+  summary?: DocumentAuditSummary | null;
 }
 
 export interface AuditListParams {
@@ -731,6 +985,7 @@ export interface AuditListParams {
   actor_id?: string;
   action?: string;
   document_id?: string;
+  owner_id?: string;
   outcome?: "SUCCESS" | "DENIED" | "";
   created_from?: string;
   created_to?: string;
@@ -755,14 +1010,34 @@ export async function getAdminSummaryRequest(
 
 export async function listAdminUsersRequest(
   token: string,
-  params: { page?: number; page_size?: number } = {},
+  params: AdminUserListParams = {},
   signal?: AbortSignal,
 ): Promise<AdminUserListResponse> {
   const query = buildQuery({
     page: params.page,
     page_size: params.page_size,
+    q: params.q,
+    role: params.role || undefined,
+    is_active:
+      params.is_active === "" || params.is_active === undefined
+        ? undefined
+        : params.is_active
+          ? "true"
+          : "false",
+    promotion_status: params.promotion_status || undefined,
   });
   return apiRequest<AdminUserListResponse>(`/admin/users${query}`, {
+    token,
+    signal,
+  });
+}
+
+export async function getAdminUserProfileRequest(
+  token: string,
+  userId: string,
+  signal?: AbortSignal,
+): Promise<AdminUserProfile> {
+  return apiRequest<AdminUserProfile>(`/admin/users/${userId}`, {
     token,
     signal,
   });
@@ -793,6 +1068,7 @@ export async function listAuditEventsRequest(
     actor_id: params.actor_id,
     action: params.action,
     document_id: params.document_id,
+    owner_id: params.owner_id,
     outcome: params.outcome || undefined,
     created_from: params.created_from,
     created_to: params.created_to,

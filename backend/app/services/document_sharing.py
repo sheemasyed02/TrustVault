@@ -40,6 +40,7 @@ class DocumentSharingError(Exception):
 class GrantResult:
     grant: DocumentPermission
     regranted: bool
+    permission_changed: bool = False
 
 
 def _load_active_grants(
@@ -142,18 +143,49 @@ def grant_document_permission(
         )
 
     existing_active = session.scalar(
-        select(DocumentPermission).where(
+        select(DocumentPermission)
+        .options(
+            joinedload(DocumentPermission.user),
+            joinedload(DocumentPermission.grantor),
+        )
+        .where(
             DocumentPermission.document_id == document.id,
             DocumentPermission.user_id == target.id,
             DocumentPermission.revoked_at.is_(None),
         )
     )
     if existing_active is not None:
-        raise DocumentSharingError(
-            "An active grant already exists for this user",
-            status_code=409,
-            reason_code="DUPLICATE_ACTIVE_GRANT",
-        )
+        if existing_active.permission == normalized:
+            raise DocumentSharingError(
+                "An active grant already exists for this user",
+                status_code=409,
+                reason_code="DUPLICATE_ACTIVE_GRANT",
+            )
+        # Owner may change READ ↔ EDIT without revoke+recreate.
+        previous = existing_active.permission
+        existing_active.permission = normalized
+        existing_active.granted_by = actor.id
+        try:
+            session.flush()
+        except SQLAlchemyError as exc:
+            logger.error("Failed to update document permission level")
+            raise DocumentSharingError(
+                "Unable to update permission",
+                status_code=503,
+                reason_code="GRANT_PERSIST_FAILED",
+            ) from exc
+        session.refresh(existing_active)
+        grant = session.scalars(
+            select(DocumentPermission)
+            .options(
+                joinedload(DocumentPermission.user),
+                joinedload(DocumentPermission.grantor),
+            )
+            .where(DocumentPermission.id == existing_active.id)
+        ).unique().one()
+        # previous kept only for clarity in callers via permission_changed.
+        del previous
+        return GrantResult(grant=grant, regranted=False, permission_changed=True)
 
     prior_revoked = session.scalar(
         select(DocumentPermission)
@@ -205,7 +237,7 @@ def grant_document_permission(
         )
         .where(DocumentPermission.id == grant.id)
     ).unique().one()
-    return GrantResult(grant=grant, regranted=regranted)
+    return GrantResult(grant=grant, regranted=regranted, permission_changed=False)
 
 
 def revoke_document_permission(
@@ -269,6 +301,7 @@ def audit_sharing_event(
     document_id: uuid.UUID | None,
     target_user_id: uuid.UUID | None,
     request_id: str | None,
+    metadata: dict | None = None,
 ) -> None:
     """Record a sharing audit event; never claim durable persistence here."""
     audit.record(
@@ -279,4 +312,5 @@ def audit_sharing_event(
         document_id=document_id,
         target_user_id=target_user_id,
         request_id=request_id,
+        metadata=metadata,
     )

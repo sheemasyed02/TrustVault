@@ -2,11 +2,13 @@
 
 export const MAX_UPLOAD_BYTES = 10 * 1024 * 1024; // 10 MiB
 
-/** TrustVault accepts editable Word documents only. */
 export const ALLOWED_EXTENSIONS = [".docx"] as const;
 
 export const DOCX_MIME_TYPE =
   "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+
+/** Legacy stored documents / PDF download MIME — not accepted for new uploads. */
+export const PDF_MIME_TYPE = "application/pdf";
 
 export const ALLOWED_MIME_TYPES = [DOCX_MIME_TYPE] as const;
 
@@ -23,11 +25,16 @@ export function validateUploadFileClient(file: File | null): string | null {
     return "File exceeds the 10 MiB size limit.";
   }
   const ext = fileExtension(file.name);
-  if (
-    !(ALLOWED_EXTENSIONS as readonly string[]).includes(ext) &&
-    !(ALLOWED_MIME_TYPES as readonly string[]).includes(file.type)
-  ) {
-    return "Only DOCX Word documents are allowed. The server also checks file content.";
+  const mimeOk = (ALLOWED_MIME_TYPES as readonly string[]).includes(file.type);
+  const extOk = (ALLOWED_EXTENSIONS as readonly string[]).includes(ext);
+  if (!extOk && !mimeOk) {
+    return "Only DOCX documents are allowed. PDF and other formats are rejected by the server.";
+  }
+  if (ext === ".pdf" || file.type === PDF_MIME_TYPE) {
+    return "Only DOCX documents are allowed. PDF uploads are not accepted.";
+  }
+  if (!extOk) {
+    return "Only DOCX documents are allowed. The server also checks file content.";
   }
   return null;
 }

@@ -129,13 +129,13 @@ export default function DashboardPage() {
           label="Documents you own"
           value={summary.ownedTotal}
           loading={summary.status === "loading"}
-          hint="GET /documents?owner_id=you"
+          hint="Uploads and files you control"
         />
         <SummaryCard
           label="Shared with you"
           value={summary.sharedTotal}
           loading={summary.status === "loading"}
-          hint="GET /documents?shared_only=true"
+          hint="Active READ or EDIT grants"
         />
         <article className="rounded-xl border border-border bg-surface p-4 shadow-[var(--shadow)]">
           <p className="text-xs font-semibold uppercase tracking-wide text-muted">
@@ -159,6 +159,12 @@ export default function DashboardPage() {
               className="font-semibold text-accent-strong hover:underline"
             >
               Shared with me
+            </Link>
+            <Link
+              href="/activity"
+              className="font-semibold text-accent-strong hover:underline"
+            >
+              Document view activity
             </Link>
           </div>
         </article>

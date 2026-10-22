@@ -307,16 +307,34 @@ def test_valid_docx_accepted(
     assert response.status_code == 201
 
 
+def test_pdf_upload_rejected_even_when_ui_bypassed(
+    client: TestClient,
+    db_session: Session,
+    auth_settings: Settings,
+    storage_mock: MagicMock,
+):
+    owner = _create_user(db_session, role="OWNER")
+    response = _upload(
+        client,
+        token=_token(owner, auth_settings),
+        content=_minimal_pdf(),
+        filename="a.pdf",
+        content_type="application/pdf",
+    )
+    assert response.status_code == 415
+    assert "DOCX" in response.json()["detail"]
+    storage_mock.upload_bytes.assert_not_called()
+
+
 @pytest.mark.parametrize(
     ("builder", "filename", "content_type"),
     [
-        (_minimal_pdf, "a.pdf", "application/pdf"),
         (_minimal_png, "a.png", "image/png"),
         (_minimal_jpeg, "a.jpg", "image/jpeg"),
         (_minimal_jpeg, "a.jpeg", "image/jpeg"),
     ],
 )
-def test_non_docx_formats_rejected(
+def test_non_document_formats_rejected(
     client: TestClient,
     db_session: Session,
     auth_settings: Settings,

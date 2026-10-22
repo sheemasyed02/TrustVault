@@ -314,6 +314,7 @@ This is my working log. I used Cursor to help write code, but I gave the rules, 
 | 18 | Permission audit | Confirmed server authz; clarified role vs grant |
 | 19 | Role-aware workflows | List `your_access` + `shared_only`; role homes/nav |
 | 20 | Acceptance + authz demo | ACCEPTANCE.md; journey tests; demo fail then restore |
+| 21 | Test DB isolation | Mock Admin users were pytest leaks; SAVEPOINT restart + purge CLI |
 
 I still review diffs, run tests myself, and refuse fake “all green” claims when a run actually failed.
 
@@ -334,3 +335,24 @@ I still review diffs, run tests myself, and refuse fake “all green” claims w
 3. Restored `require_document_read` → IDOR + `tests/security/` → **34 passed**
 
 **How I checked:** (exact counts in completion report / ACCEPTANCE evidence log)
+
+---
+
+## Task 21 — Stop “mock users” in Admin Users + expand demo accounts (2026-10-21)
+
+**What I asked for:** Fix Admin Users filling with fake accounts on login; add more OWNER/VIEWER demos alongside snovasys/sheema/user; verify against the full brief and fill any missing floor features.
+
+**What the tool (and I) got wrong at first:** Treating “login creates users” as an auth bug. Login never inserts users. The rows were pytest fixtures (`*@example.com`) that had **committed into the real `DATABASE_URL`** because `tests/conftest.py` only wrapped a nested SAVEPOINT and did not restart it after endpoint/`get_db` `session.commit()`.
+
+**What I did instead:**
+1. Rewrote `backend/tests/conftest.py` to keep an outer connection transaction and re-open nested SAVEPOINTs after nested commits (standard SQLAlchemy test isolation).
+2. Added `python -m app.cli.purge_leaked_test_users` (+ dry-run) and purged **32** leaked `@example.com` rows from the local DB.
+3. Expanded `seed_demo_users` with `raj`/`priya` (OWNER) and `alex`/`jordan` (VIEWER); README + admin Users copy clarify live API vs leftover fixtures.
+4. Added `tests/test_db_isolation.py`; adjusted admin users Vitest so help-text `@example.com` is not mistaken for fabricated table rows.
+5. Brief gap-check: floor items (authz, revoke-immediate via DB, audit hash chain, search, validation, admin audit, THREATS/PROMPTS/tests) already met; optional in-product AI share suggestions left out on purpose (suggestion must not auto-widen access).
+
+**How I checked:**
+- Purge removed residual `@example.com` rows; demo seed left only `@trustvault.demo` accounts.
+- One remaining intentional leak path: `test_login_failure_creates_denied_audit_event` used a real committed session — fixed with post-test cleanup of that user + related audit rows.
+- Backend `pytest -q` → **252 passed**; post-suite purge dry-run → **No leaked test users found.**
+- Frontend `npm test -- --run` → **59 passed** (16 files) after updating admin users Vitest.

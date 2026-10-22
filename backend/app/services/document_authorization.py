@@ -60,7 +60,8 @@ GENERIC_UNAVAILABLE = "Authorization check failed"
 
 class DocumentAction(str, Enum):
     READ = "read"  # metadata read and download
-    EDIT_METADATA = "edit_metadata"
+    EDIT_METADATA = "edit_metadata"  # owner only (title/category/description)
+    EDIT_CONTENT = "edit_content"  # owner or active EDIT grant (file body)
     MANAGE_PERMISSIONS = "manage_permissions"  # grant / revoke
     DELETE = "delete"
 
@@ -232,7 +233,9 @@ def _action_allowed(
     if is_owner:
         return True
     if grant_permission == "EDIT":
-        return action in {DocumentAction.READ, DocumentAction.EDIT_METADATA}
+        # EDIT grants view/download and content edits only — not metadata,
+        # sharing, ownership, or delete.
+        return action in {DocumentAction.READ, DocumentAction.EDIT_CONTENT}
     if grant_permission == "READ":
         return action == DocumentAction.READ
     return False
@@ -427,7 +430,7 @@ def require_document_edit(
     document_id: uuid.UUID,
     audit: AuthorizationAuditHook | None = None,
 ) -> Document:
-    """Require ownership or an active EDIT grant for permitted metadata edits."""
+    """Require document ownership for title/category/description edits."""
     return evaluate_document_access(
         session,
         user=user,
@@ -450,6 +453,40 @@ def require_document_edit_context(
         user=user,
         document_id=document_id,
         action=DocumentAction.EDIT_METADATA,
+        audit=audit,
+    )
+
+
+def require_document_content_edit(
+    session: Session,
+    *,
+    user: User,
+    document_id: uuid.UUID,
+    audit: AuthorizationAuditHook | None = None,
+) -> Document:
+    """Require ownership or an active EDIT grant for document body edits."""
+    return evaluate_document_access(
+        session,
+        user=user,
+        document_id=document_id,
+        action=DocumentAction.EDIT_CONTENT,
+        audit=audit,
+    ).document
+
+
+def require_document_content_edit_context(
+    session: Session,
+    *,
+    user: User,
+    document_id: uuid.UUID,
+    audit: AuthorizationAuditHook | None = None,
+) -> DocumentAccessContext:
+    """Like require_document_content_edit, keeping ownership/grant details."""
+    return evaluate_document_access(
+        session,
+        user=user,
+        document_id=document_id,
+        action=DocumentAction.EDIT_CONTENT,
         audit=audit,
     )
 

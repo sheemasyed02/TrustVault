@@ -7,7 +7,6 @@ import { useAuth, useHandleUnauthorized } from "@/components/auth-provider";
 import { ApiError, uploadDocumentRequest } from "@/lib/api";
 import { formatBytes } from "@/lib/format";
 import {
-  ALLOWED_EXTENSIONS,
   MAX_UPLOAD_BYTES,
   validateUploadFileClient,
 } from "@/lib/upload-rules";
@@ -81,10 +80,10 @@ export function UploadDocumentForm() {
       noValidate
     >
       <p className="text-sm text-muted">
-        Allowed type: Word DOCX only (editable confidential documents). Maximum
-        size {formatBytes(MAX_UPLOAD_BYTES)} (
-        {MAX_UPLOAD_BYTES.toLocaleString()} bytes). Client checks are guidance
-        only — the server validates content.
+        Allowed type: Microsoft Word DOCX only. PDF, legacy Word (.doc), and
+        other formats are rejected. Maximum size {formatBytes(MAX_UPLOAD_BYTES)}{" "}
+        ({MAX_UPLOAD_BYTES.toLocaleString()} bytes). Client checks are guidance
+        only — the server validates extension, MIME type, and DOCX structure.
       </p>
 
       <label className="block text-sm">
@@ -124,7 +123,7 @@ export function UploadDocumentForm() {
         <span className="mb-1 block font-medium">File</span>
         <input
           type="file"
-          accept={ALLOWED_EXTENSIONS.join(",")}
+          accept=".docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
           onChange={(event) => onFileChange(event.target.files?.[0] ?? null)}
           className="block w-full text-sm"
         />

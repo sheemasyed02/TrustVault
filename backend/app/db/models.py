@@ -76,6 +76,10 @@ class User(Base):
         back_populates="user",
         foreign_keys="DocumentPermission.user_id",
     )
+    promotion_requests: Mapped[list["OwnerPromotionRequest"]] = relationship(
+        back_populates="requester",
+        foreign_keys="OwnerPromotionRequest.requester_id",
+    )
 
 
 class Document(Base):
@@ -201,6 +205,62 @@ class DocumentPermission(Base):
     @property
     def is_active(self) -> bool:
         return self.revoked_at is None
+
+
+class OwnerPromotionRequest(Base):
+    """Viewer request to become a platform OWNER (admin-reviewed)."""
+
+    __tablename__ = "owner_promotion_requests"
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('PENDING', 'APPROVED', 'REJECTED')",
+            name="ck_owner_promotion_requests_status",
+        ),
+        Index("ix_owner_promotion_requests_requester_id", "requester_id"),
+        Index("ix_owner_promotion_requests_status", "status"),
+        Index("ix_owner_promotion_requests_created_at", "created_at"),
+        # At most one pending request per user.
+        Index(
+            "uq_owner_promotion_requests_pending_requester",
+            "requester_id",
+            unique=True,
+            postgresql_where=text("status = 'PENDING'"),
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        default=uuid.uuid4,
+    )
+    requester_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    status: Mapped[str] = mapped_column(String(32), nullable=False)
+    justification: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    admin_note: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    reviewed_by: Mapped[Optional[uuid.UUID]] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+    )
+    reviewed_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
+
+    requester: Mapped["User"] = relationship(
+        back_populates="promotion_requests",
+        foreign_keys=[requester_id],
+    )
+    reviewer: Mapped[Optional["User"]] = relationship(foreign_keys=[reviewed_by])
 
 
 class AuditEvent(Base):

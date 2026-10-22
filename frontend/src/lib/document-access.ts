@@ -3,8 +3,10 @@ import type { DocumentDetail, DocumentAccessLevel, UserPublic } from "@/lib/api"
 export interface DocumentUiAccess {
   isOwner: boolean;
   yourAccess: DocumentAccessLevel;
-  /** Owner or EDIT grantee — metadata and in-app content editing. */
-  canEditDocument: boolean;
+  /** Owner or EDIT grantee — in-app document body editing. */
+  canEditContent: boolean;
+  /** Document owner only — title, category, description. */
+  canEditMetadata: boolean;
   canManageSharing: boolean;
   canDelete: boolean;
 }
@@ -30,11 +32,12 @@ export function getDocumentUiAccess(
 ): DocumentUiAccess {
   const yourAccess = doc.your_access;
   const isOwner = yourAccess === "OWNER" || doc.owner.id === user.id;
-  const canEditDocument = yourAccess === "OWNER" || yourAccess === "EDIT";
+  const canEditContent = yourAccess === "OWNER" || yourAccess === "EDIT";
   return {
     isOwner,
     yourAccess,
-    canEditDocument,
+    canEditContent,
+    canEditMetadata: isOwner,
     canManageSharing: isOwner,
     canDelete: isOwner,
   };

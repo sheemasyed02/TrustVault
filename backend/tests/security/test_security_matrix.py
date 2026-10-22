@@ -64,7 +64,14 @@ def test_matrix_owner_can_list_read_download_edit_share_delete(
 
     download = client.get(f"/documents/{doc.id}/download", headers=headers)
     assert download.status_code == 200
-    assert download.content == DOCX_BYTES
+    assert download.content.startswith(b"%PDF")
+    inline = client.get(
+        f"/documents/{doc.id}/download",
+        params={"disposition": "inline"},
+        headers=headers,
+    )
+    assert inline.status_code == 200
+    assert inline.content == DOCX_BYTES
 
     patched = client.patch(
         f"/documents/{doc.id}",
@@ -159,13 +166,13 @@ def test_matrix_read_grantee_can_read_download_but_not_mutate(
 # ---------------------------------------------------------------------------
 
 
-def test_matrix_edit_grantee_can_edit_metadata_not_share_or_delete(
+def test_matrix_edit_grantee_can_edit_content_not_metadata_share_or_delete(
     client: TestClient,
     db_session: Session,
     auth_settings: Settings,
     storage_mock,
 ):
-    """VIEWER + EDIT grant / shared doc / PATCH 200; grant/delete 403."""
+    """VIEWER + EDIT grant: content OK; metadata/share/delete forbidden."""
     owner = make_user(db_session, role="OWNER")
     editor = make_user(db_session, role="VIEWER")
     other = make_user(db_session, role="VIEWER")
@@ -186,8 +193,14 @@ def test_matrix_edit_grantee_can_edit_metadata_not_share_or_delete(
         headers=headers,
         json={"title": "Editor Title", "category": "Legal"},
     )
-    assert patched.status_code == 200
-    assert patched.json()["title"] == "Editor Title"
+    assert patched.status_code == 403
+
+    content = client.put(
+        f"/documents/{doc.id}/content",
+        headers=headers,
+        json={"text": "Edited body from EDIT grantee"},
+    )
+    assert content.status_code == 200
 
     # Mass-assignment of owner/storage rejected.
     bad = client.patch(
@@ -344,34 +357,36 @@ def test_matrix_revoke_read_denies_next_download_same_token(
     storage_mock.open_object.assert_not_called()
 
 
-def test_matrix_revoke_edit_denies_next_metadata_patch_same_token(
+def test_matrix_revoke_edit_denies_next_content_put_same_token(
     client: TestClient,
     db_session: Session,
     auth_settings: Settings,
+    storage_mock,
 ):
-    """VIEWER + EDIT then revoked / same JWT / PATCH 200 then 403/404."""
+    """VIEWER + EDIT then revoked / same JWT / content PUT 200 then 403/404."""
     owner = make_user(db_session, role="OWNER")
     editor = make_user(db_session, role="VIEWER")
     doc = make_document(db_session, owner)
+    storage_mock._store[doc.storage_key] = DOCX_BYTES
     grant = grant_permission(
         db_session, document=doc, user=editor, permission="EDIT", granted_by=owner
     )
     headers = auth_header(editor, auth_settings)
 
-    ok = client.patch(
-        f"/documents/{doc.id}",
+    ok = client.put(
+        f"/documents/{doc.id}/content",
         headers=headers,
-        json={"title": "Still Allowed"},
+        json={"text": "Still Allowed"},
     )
     assert ok.status_code == 200
 
     grant.revoked_at = datetime.now(timezone.utc)
     db_session.flush()
 
-    denied = client.patch(
-        f"/documents/{doc.id}",
+    denied = client.put(
+        f"/documents/{doc.id}/content",
         headers=headers,
-        json={"title": "Should Fail"},
+        json={"text": "Should Fail"},
     )
     assert denied.status_code in {403, 404}
 

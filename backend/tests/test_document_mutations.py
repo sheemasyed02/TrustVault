@@ -178,7 +178,7 @@ def test_owner_can_edit_category_and_description(
     assert response.json()["description"] == "New notes"
 
 
-def test_edit_grantee_can_edit_metadata(
+def test_edit_grantee_cannot_edit_metadata(
     client: TestClient,
     db_session: Session,
     auth_settings: Settings,
@@ -194,9 +194,9 @@ def test_edit_grantee_can_edit_metadata(
         headers=_auth(editor, auth_settings),
         json={"title": "Editor Title"},
     )
-    assert response.status_code == 200
-    assert response.json()["title"] == "Editor Title"
-    assert response.json()["owner"]["id"] == str(owner.id)
+    assert response.status_code == 403
+    db_session.refresh(doc)
+    assert doc.title != "Editor Title"
 
 
 def test_read_grantee_cannot_edit(
@@ -274,10 +274,21 @@ def test_revoked_edit_grantee_cannot_edit_next_request(
     client: TestClient,
     db_session: Session,
     auth_settings: Settings,
+    storage_mock: MagicMock,
 ):
+    from app.services.document_content import build_docx_bytes_from_text
+    from app.services.file_validation import DOCX_MEDIA_TYPE
+
     owner = _user(db_session, role="OWNER")
     editor = _user(db_session, role="VIEWER")
     doc = _document(db_session, owner)
+    # Content editing is DOCX-only (PDF in-app editing is unsupported).
+    docx_bytes = build_docx_bytes_from_text("Before")
+    doc.mime_type = DOCX_MEDIA_TYPE
+    doc.file_size = len(docx_bytes)
+    doc.original_filename = "memo.docx"
+    db_session.flush()
+    storage_mock.upload_bytes.side_effect = None
     client.post(
         f"/documents/{doc.id}/permissions",
         headers=_auth(owner, auth_settings),
@@ -285,10 +296,10 @@ def test_revoked_edit_grantee_cannot_edit_next_request(
     )
     headers = _auth(editor, auth_settings)
     assert (
-        client.patch(
-            f"/documents/{doc.id}",
+        client.put(
+            f"/documents/{doc.id}/content",
             headers=headers,
-            json={"title": "Before Revoke"},
+            json={"text": "Before Revoke"},
         ).status_code
         == 200
     )
@@ -296,10 +307,10 @@ def test_revoked_edit_grantee_cannot_edit_next_request(
         f"/documents/{doc.id}/permissions/{editor.id}",
         headers=_auth(owner, auth_settings),
     )
-    denied = client.patch(
-        f"/documents/{doc.id}",
+    denied = client.put(
+        f"/documents/{doc.id}/content",
         headers=headers,
-        json={"title": "After Revoke"},
+        json={"text": "After Revoke"},
     )
     assert denied.status_code == 404
 
@@ -561,7 +572,7 @@ def test_r2_deletion_failure_does_not_claim_complete_success(
     )
     assert any(
         e["action"] == "DOCUMENT_DELETE"
-        and e["outcome"] == "FAILURE"
+        and e["outcome"] == "DENIED"
         and e["reason_code"] == "STORAGE_DELETE_FAILED"
         for e in audit_hook.events
     )

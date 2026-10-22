@@ -7,6 +7,9 @@ Required environment variables (passwords are never printed):
   DEMO_OWNER_PASSWORD
   DEMO_VIEWER_PASSWORD
 
+Additional OWNER/VIEWER accounts reuse the same role password env vars so you
+do not need extra secrets for local demos.
+
 Run from the backend directory:
 
   python -m app.cli.seed_demo_users
@@ -50,9 +53,33 @@ DEMO_ACCOUNTS = (
         password_env="DEMO_OWNER_PASSWORD",
     ),
     DemoAccount(
+        email="raj@trustvault.demo",
+        role="OWNER",
+        name="Raj Owner",
+        password_env="DEMO_OWNER_PASSWORD",
+    ),
+    DemoAccount(
+        email="priya@trustvault.demo",
+        role="OWNER",
+        name="Priya Owner",
+        password_env="DEMO_OWNER_PASSWORD",
+    ),
+    DemoAccount(
         email="user@trustvault.demo",
         role="VIEWER",
         name="Demo Viewer",
+        password_env="DEMO_VIEWER_PASSWORD",
+    ),
+    DemoAccount(
+        email="alex@trustvault.demo",
+        role="VIEWER",
+        name="Alex Viewer",
+        password_env="DEMO_VIEWER_PASSWORD",
+    ),
+    DemoAccount(
+        email="jordan@trustvault.demo",
+        role="VIEWER",
+        name="Jordan Viewer",
         password_env="DEMO_VIEWER_PASSWORD",
     ),
 )

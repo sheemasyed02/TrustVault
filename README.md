@@ -61,11 +61,24 @@ cd D:\TrustVault\backend
 python -m app.cli.seed_demo_users
 ```
 
-| Email | Role |
-| --- | --- |
-| `snovasys@trustvault.demo` | ADMIN |
-| `sheema@trustvault.demo` | OWNER |
-| `user@trustvault.demo` | VIEWER |
+| Email | Role | Password env |
+| --- | --- | --- |
+| `snovasys@trustvault.demo` | ADMIN | `DEMO_ADMIN_PASSWORD` |
+| `sheema@trustvault.demo` | OWNER | `DEMO_OWNER_PASSWORD` |
+| `raj@trustvault.demo` | OWNER | `DEMO_OWNER_PASSWORD` |
+| `priya@trustvault.demo` | OWNER | `DEMO_OWNER_PASSWORD` |
+| `user@trustvault.demo` | VIEWER | `DEMO_VIEWER_PASSWORD` |
+| `alex@trustvault.demo` | VIEWER | `DEMO_VIEWER_PASSWORD` |
+| `jordan@trustvault.demo` | VIEWER | `DEMO_VIEWER_PASSWORD` |
+
+Login never creates users. The API only authenticates existing rows. If the Admin **Users** table fills with `*@example.com` or `* Security` names, those are leftover pytest fixtures from before test isolation was fixed — purge them:
+
+```powershell
+cd D:\TrustVault\backend
+.\.venv\Scripts\Activate.ps1
+python -m app.cli.purge_leaked_test_users --dry-run
+python -m app.cli.purge_leaked_test_users
+```
 
 ## Tests
 

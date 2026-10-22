@@ -37,8 +37,12 @@ export default function UploadDocumentPage() {
           Upload document
         </h1>
         <p className="mt-2 max-w-2xl text-sm text-muted">
-          Files go to private storage through <code className="text-xs">POST /documents</code>.
-          Storage keys and credentials are never returned to the browser.
+          Upload Microsoft Word DOCX files only (PDF is rejected by the API).
+          Files go to private storage through{" "}
+          <code className="text-xs">POST /documents</code>. Storage keys and
+          credentials are never returned to the browser. Authorized users edit
+          DOCX content in-app; downloads are converted to PDF from the latest
+          saved DOCX.
         </p>
       </header>
       <UploadDocumentForm />

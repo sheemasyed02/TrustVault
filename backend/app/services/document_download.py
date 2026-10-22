@@ -44,6 +44,36 @@ def safe_download_filename(document: Document) -> str:
     return base
 
 
+def safe_pdf_download_filename(document: Document) -> str:
+    """Filename for PDF downloads (converted DOCX or native PDF)."""
+    raw = (document.original_filename or document.title or "document").strip()
+    raw = Path(raw.replace("\\", "/").split("/")[-1]).name
+    base = raw.replace("\r", " ").replace("\n", " ").replace('"', "")
+    base = re.sub(r"[^A-Za-z0-9._-]+", "_", base)
+    base = re.sub(r"_+", "_", base).strip("._") or "document"
+    # Strip known source extensions before forcing .pdf
+    lower = base.lower()
+    for ext in (".docx", ".pdf", ".doc"):
+        if lower.endswith(ext):
+            base = base[: -len(ext)]
+            break
+    base = base.strip("._") or "document"
+    base = base[:200]
+    return f"{base}.pdf"
+
+
+def read_object_bytes(storage: R2StorageService, document: Document) -> bytes:
+    """Load full object bytes after authz (used for DOCX→PDF conversion)."""
+    try:
+        with storage.open_object(document.storage_key) as body:
+            return body.read()
+    except StorageError as exc:
+        raise DownloadStorageError(
+            "Document storage is unavailable",
+            reason_code="STORAGE_DOWNLOAD_FAILED",
+        ) from exc
+
+
 def open_download_stream(
     storage: R2StorageService,
     document: Document,

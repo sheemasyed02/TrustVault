@@ -9,19 +9,22 @@ import {
   putDocumentContentRequest,
   type DocumentDetail,
 } from "@/lib/api";
-import { DOCX_MIME_TYPE } from "@/lib/upload-rules";
+import { DOCX_MIME_TYPE, PDF_MIME_TYPE } from "@/lib/upload-rules";
 
 interface DocumentPreviewProps {
   document: DocumentDetail;
-  /** Owner or EDIT grantee — contenteditable + save. READ is view-only. */
+  /** Owner or EDIT grantee — contenteditable + save for DOCX only. */
   canEdit: boolean;
   onDocumentUpdated?: (next: DocumentDetail) => void;
 }
 
 /**
- * In-browser DOCX viewer/editor.
- * Loads bytes via the authorized API. Owners and EDIT grantees can edit text
- * and save (rebuilds DOCX server-side). READ grantees get a read-only view.
+ * Authorized in-browser preview/editor.
+ *
+ * - DOCX: mammoth HTML preview; owners/EDIT may edit plain text and save.
+ *   Saves rewrite the document body while preserving other DOCX package parts
+ *   when possible (styles/media/headers). Body tables/images are simplified.
+ * - Legacy PDF rows: native browser preview only (new uploads are DOCX-only).
  */
 export function DocumentPreview({
   document,
@@ -37,21 +40,27 @@ export function DocumentPreview({
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [html, setHtml] = useState<string | null>(null);
+  const [pdfUrl, setPdfUrl] = useState<string | null>(null);
   const [dirty, setDirty] = useState(false);
   const [saving, setSaving] = useState(false);
 
   const isDocx = document.mime_type === DOCX_MIME_TYPE;
+  const isPdf = document.mime_type === PDF_MIME_TYPE;
+  const supported = isDocx || isPdf;
+  const canEditDocx = canEdit && isDocx;
 
   useEffect(() => {
-    if (!accessToken || !isDocx) return;
+    if (!accessToken || !supported) return;
     const controller = new AbortController();
     let cancelled = false;
+    let objectUrl: string | null = null;
 
     void (async () => {
       setStatus("loading");
       setError(null);
       setMessage(null);
       setHtml(null);
+      setPdfUrl(null);
       setDirty(false);
       try {
         const result = await previewDocumentRequest(
@@ -61,17 +70,31 @@ export function DocumentPreview({
         );
         if (cancelled) return;
         const buffer = await result.blob.arrayBuffer();
-        const mammothMod = await import("mammoth");
-        const mammoth = mammothMod.default ?? mammothMod;
-        const converted = await mammoth.convertToHtml({ arrayBuffer: buffer });
-        if (cancelled) return;
-        setHtml(converted.value);
+
+        if (isDocx) {
+          const mammothMod = await import("mammoth");
+          const mammoth = mammothMod.default ?? mammothMod;
+          const converted = await mammoth.convertToHtml({ arrayBuffer: buffer });
+          if (cancelled) return;
+          setHtml(converted.value);
+          setStatus("ready");
+          return;
+        }
+
+        const blob = new Blob([buffer], { type: PDF_MIME_TYPE });
+        objectUrl = URL.createObjectURL(blob);
+        if (cancelled) {
+          URL.revokeObjectURL(objectUrl);
+          return;
+        }
+        setPdfUrl(objectUrl);
         setStatus("ready");
       } catch (err: unknown) {
         if (err instanceof DOMException && err.name === "AbortError") return;
         if (cancelled) return;
         if (handleUnauthorized(err)) return;
         setHtml(null);
+        setPdfUrl(null);
         setError(
           err instanceof ApiError
             ? err.detail
@@ -84,16 +107,25 @@ export function DocumentPreview({
     return () => {
       cancelled = true;
       controller.abort();
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
     };
-  }, [accessToken, document.id, document.sha256_checksum, handleUnauthorized, isDocx]);
+  }, [
+    accessToken,
+    document.id,
+    document.sha256_checksum,
+    handleUnauthorized,
+    isDocx,
+    supported,
+  ]);
 
   useEffect(() => {
-    if (status !== "ready" || !editorRef.current || html === null) return;
+    if (status !== "ready" || !editorRef.current || html === null || !isDocx)
+      return;
     editorRef.current.innerHTML = html;
-  }, [html, status, canEdit]);
+  }, [html, status, isDocx]);
 
   async function onSave() {
-    if (!accessToken || !canEdit || !editorRef.current || saving) return;
+    if (!accessToken || !canEditDocx || !editorRef.current || saving) return;
     const text = editorRef.current.innerText ?? "";
     setSaving(true);
     setError(null);
@@ -104,7 +136,9 @@ export function DocumentPreview({
       });
       onDocumentUpdated?.(updated);
       setDirty(false);
-      setMessage("Document content saved.");
+      setMessage(
+        "Document content saved. Body text is stored in the DOCX; complex body formatting (tables/images in the body) may be simplified. Styles and other package parts are kept when possible. Download PDF uses the latest saved DOCX.",
+      );
     } catch (err) {
       if (handleUnauthorized(err)) return;
       setError(
@@ -115,14 +149,14 @@ export function DocumentPreview({
     }
   }
 
-  if (!isDocx) {
+  if (!supported) {
     return (
       <section className="rounded-xl border border-border bg-surface p-5 text-sm text-muted shadow-[var(--shadow)]">
         <h2 className="font-display text-xl text-foreground">Preview</h2>
         <p className="mt-2">
-          In-browser preview is available for DOCX documents. This file type (
-          {document.mime_type}) is legacy — use Download if you still have
-          access.
+          In-browser preview supports DOCX (and legacy PDF rows). This file type
+          ({document.mime_type}) is unsupported — use Download PDF if you still
+          have access.
         </p>
       </section>
     );
@@ -133,22 +167,34 @@ export function DocumentPreview({
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h2 className="font-display text-xl text-foreground">
-            {canEdit ? "Document editor" : "Document preview"}
+            {isPdf
+              ? "PDF preview (legacy)"
+              : canEditDocx
+                ? "Edit document content"
+                : "Document preview"}
           </h2>
           <p className="mt-1 text-sm text-muted">
-            {canEdit
-              ? "You can edit this document in TrustVault. Saving rebuilds the stored DOCX (simple text formatting). Use Download for full Word features."
-              : "Read-only view. You have READ access — request EDIT from the owner to change content or metadata."}
+            {isPdf
+              ? "This is a legacy PDF. New uploads must be DOCX. In-app content editing is not available for PDFs."
+              : canEditDocx
+                ? "Edit the document body below and save. Metadata (title, category, description) is edited separately by the owner only. PDF download converts the latest saved DOCX."
+                : "Read-only view. Request EDIT from the owner to change DOCX contents. You can still download a PDF if you have access."}
+          </p>
+          <p className="mt-1 text-xs text-muted">
+            Format: {isPdf ? "PDF (legacy)" : "DOCX"}
+            {document.original_filename
+              ? ` · Original file: ${document.original_filename}`
+              : null}
           </p>
         </div>
-        {canEdit ? (
+        {canEditDocx ? (
           <button
             type="button"
             onClick={() => void onSave()}
             disabled={!dirty || saving || status !== "ready"}
             className="rounded-md bg-accent px-4 py-2 text-sm font-semibold text-white hover:bg-accent-strong disabled:opacity-60"
           >
-            {saving ? "Saving…" : "Save document"}
+            {saving ? "Saving…" : "Save content"}
           </button>
         ) : null}
       </div>
@@ -170,19 +216,27 @@ export function DocumentPreview({
         </p>
       ) : null}
 
-      {status === "ready" ? (
+      {status === "ready" && isPdf && pdfUrl ? (
+        <iframe
+          title="PDF preview"
+          src={pdfUrl}
+          className="mt-4 h-[70vh] w-full rounded-md border border-border bg-white"
+        />
+      ) : null}
+
+      {status === "ready" && isDocx ? (
         <div
           ref={editorRef}
-          role={canEdit ? "textbox" : undefined}
-          aria-label={canEdit ? "Editable document body" : "Document body"}
-          aria-readonly={!canEdit}
-          contentEditable={canEdit}
+          role={canEditDocx ? "textbox" : undefined}
+          aria-label={canEditDocx ? "Editable document body" : "Document body"}
+          aria-readonly={!canEditDocx}
+          contentEditable={canEditDocx}
           suppressContentEditableWarning
           onInput={() => {
-            if (canEdit) setDirty(true);
+            if (canEditDocx) setDirty(true);
           }}
           className={`docx-preview mt-4 max-h-[70vh] overflow-auto rounded-md border border-border bg-white px-5 py-4 text-sm leading-relaxed text-foreground outline-none ${
-            canEdit
+            canEditDocx
               ? "focus-visible:ring-2 focus-visible:ring-accent/40"
               : "cursor-default"
           }`}

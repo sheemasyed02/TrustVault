@@ -39,16 +39,17 @@ describe("formatDocumentAccessLabel", () => {
 });
 
 describe("getDocumentUiAccess", () => {
-  it("gives owner full edit/share/delete", () => {
+  it("gives owner full content/metadata/share/delete", () => {
     const doc: DocumentDetail = { ...baseDoc, your_access: "OWNER" };
     const access = getDocumentUiAccess(owner, doc);
     expect(access.isOwner).toBe(true);
-    expect(access.canEditDocument).toBe(true);
+    expect(access.canEditContent).toBe(true);
+    expect(access.canEditMetadata).toBe(true);
     expect(access.canManageSharing).toBe(true);
     expect(access.canDelete).toBe(true);
   });
 
-  it("gives EDIT grantee content/metadata edit but not share/delete", () => {
+  it("gives EDIT grantee content edit but not metadata/share/delete", () => {
     const viewer: UserPublic = {
       ...owner,
       id: "99999999-9999-9999-9999-999999999999",
@@ -58,7 +59,8 @@ describe("getDocumentUiAccess", () => {
     const doc: DocumentDetail = { ...baseDoc, your_access: "EDIT" };
     const access = getDocumentUiAccess(viewer, doc);
     expect(access.isOwner).toBe(false);
-    expect(access.canEditDocument).toBe(true);
+    expect(access.canEditContent).toBe(true);
+    expect(access.canEditMetadata).toBe(false);
     expect(access.canManageSharing).toBe(false);
     expect(access.canDelete).toBe(false);
   });
@@ -72,7 +74,8 @@ describe("getDocumentUiAccess", () => {
     };
     const doc: DocumentDetail = { ...baseDoc, your_access: "READ" };
     const access = getDocumentUiAccess(viewer, doc);
-    expect(access.canEditDocument).toBe(false);
+    expect(access.canEditContent).toBe(false);
+    expect(access.canEditMetadata).toBe(false);
     expect(access.canManageSharing).toBe(false);
     expect(access.canDelete).toBe(false);
   });
@@ -96,6 +99,7 @@ describe("getDocumentUiAccess", () => {
     expect(access.isOwner).toBe(false);
     expect(access.canManageSharing).toBe(false);
     expect(access.canDelete).toBe(false);
-    expect(access.canEditDocument).toBe(false);
+    expect(access.canEditContent).toBe(false);
+    expect(access.canEditMetadata).toBe(false);
   });
 });

@@ -21,7 +21,7 @@ from app.db.session import get_db, reset_engine
 from app.main import app
 from app.services.document_authorization import (
     DocumentAuthorizationError,
-    require_document_edit,
+    require_document_content_edit,
 )
 from app.services.document_sharing import DocumentSharingError, grant_document_permission
 from app.services.upload_audit import FailingUploadAuditHook, RecordingUploadAuditHook
@@ -345,12 +345,22 @@ def test_duplicate_active_grant_conflict(
         json={"user_id": str(target.id), "permission": "READ"},
     )
     assert first.status_code == 201
-    second = client.post(
+    # Identical active grant remains a conflict.
+    same = client.post(
+        f"/documents/{doc.id}/permissions",
+        headers=_auth(owner, auth_settings),
+        json={"user_id": str(target.id), "permission": "READ"},
+    )
+    assert same.status_code == 409
+    # Changing READ → EDIT updates the active grant in place.
+    upgraded = client.post(
         f"/documents/{doc.id}/permissions",
         headers=_auth(owner, auth_settings),
         json={"user_id": str(target.id), "permission": "EDIT"},
     )
-    assert second.status_code == 409
+    assert upgraded.status_code == 201
+    assert upgraded.json()["permission"] == "EDIT"
+    assert upgraded.json()["id"] == first.json()["id"]
 
 
 def test_regrant_after_revoke_creates_new_active_grant(
@@ -498,7 +508,7 @@ def test_revoked_edit_denied_edit_and_download_same_token(
     editor_headers = _auth(editor, auth_settings)
 
     assert client.get(f"/documents/{doc.id}/download", headers=editor_headers).status_code == 200
-    require_document_edit(db_session, user=editor, document_id=doc.id)
+    require_document_content_edit(db_session, user=editor, document_id=doc.id)
 
     client.delete(
         f"/documents/{doc.id}/permissions/{editor.id}",
@@ -507,7 +517,7 @@ def test_revoked_edit_denied_edit_and_download_same_token(
     storage_mock.open_object.reset_mock()
 
     with pytest.raises(DocumentAuthorizationError) as exc:
-        require_document_edit(db_session, user=editor, document_id=doc.id)
+        require_document_content_edit(db_session, user=editor, document_id=doc.id)
     assert exc.value.status_code == 404
 
     denied = client.get(f"/documents/{doc.id}/download", headers=editor_headers)
@@ -561,12 +571,12 @@ def test_manipulated_grantor_fields_rejected(
 
 
 def test_concurrent_duplicate_grants_cannot_conflict(db_session: Session):
-    """Application check + partial unique index keep a single active grant."""
+    """Identical active grants conflict; level changes keep a single row."""
     owner = _user(db_session, role="OWNER")
     target = _user(db_session, role="VIEWER")
     doc = _document(db_session, owner)
 
-    grant_document_permission(
+    first = grant_document_permission(
         db_session,
         actor=owner,
         document_id=doc.id,
@@ -579,10 +589,21 @@ def test_concurrent_duplicate_grants_cannot_conflict(db_session: Session):
             actor=owner,
             document_id=doc.id,
             target_user_id=target.id,
-            permission="EDIT",
+            permission="READ",
         )
     assert exc.value.reason_code == "DUPLICATE_ACTIVE_GRANT"
     assert exc.value.status_code == 409
+
+    changed = grant_document_permission(
+        db_session,
+        actor=owner,
+        document_id=doc.id,
+        target_user_id=target.id,
+        permission="EDIT",
+    )
+    assert changed.permission_changed is True
+    assert changed.grant.id == first.grant.id
+    assert changed.grant.permission == "EDIT"
 
     active = list(
         db_session.scalars(
@@ -594,6 +615,7 @@ def test_concurrent_duplicate_grants_cannot_conflict(db_session: Session):
         ).all()
     )
     assert len(active) == 1
+    assert active[0].permission == "EDIT"
 
 
 def test_audit_failure_does_not_claim_success(

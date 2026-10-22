@@ -8,7 +8,6 @@ read/download permission.
 from __future__ import annotations
 
 import logging
-import math
 import uuid
 from datetime import datetime
 
@@ -22,40 +21,34 @@ from app.db.session import get_db
 from app.schemas.admin_users import (
     AdminSummaryResponse,
     AdminUserListResponse,
+    AdminUserProfileResponse,
+    AdminUserRoleUpdateRequest,
     AdminUserStatusUpdateRequest,
     AdminUserSummary,
 )
 from app.schemas.audit import (
     AuditEventListResponse,
-    AuditEventResponse,
     AuditIntegrityResponse,
+    DocumentViewActivityListResponse,
+)
+from app.services.admin_users import (
+    AdminUserListFilters,
+    get_admin_user_profile,
+    list_admin_users,
+    summarize_admin_user,
 )
 from app.services.audit_trail import (
     append_audit_event,
+    enrich_audit_event_responses,
     list_audit_events,
     verify_audit_chain,
 )
+from app.services.document_view_audit import list_admin_document_view_activity
+from app.services.promotion_service import PromotionError, update_user_role
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/admin", tags=["admin"])
-
-
-def _event_response(event: AuditEvent) -> AuditEventResponse:
-    return AuditEventResponse(
-        id=event.id,
-        created_at=event.created_at,
-        actor_id=event.actor_id,
-        action=event.action,
-        document_id=event.document_id,
-        target_user_id=event.target_user_id,
-        outcome=event.outcome,
-        reason_code=event.reason_code,
-        request_id=event.request_id,
-        metadata=dict(event.metadata_json or {}),
-        previous_hash=event.previous_hash,
-        event_hash=event.event_hash,
-    )
 
 
 @router.get("/summary", response_model=AdminSummaryResponse)
@@ -102,28 +95,68 @@ def admin_summary(
 def list_users_admin(
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=50, ge=1, le=100),
+    q: str | None = Query(
+        default=None,
+        max_length=200,
+        description="Search by name or email (case-insensitive)",
+    ),
+    role: str | None = Query(
+        default=None,
+        description="Filter by ADMIN, OWNER, or VIEWER",
+    ),
+    is_active: bool | None = Query(
+        default=None,
+        description="Filter by account activation status",
+    ),
+    promotion_status: str | None = Query(
+        default=None,
+        description="PENDING, APPROVED, REJECTED, or NONE (no pending / no match)",
+    ),
     current_user: User = Depends(require_admin),
     session: Session = Depends(get_db),
 ) -> AdminUserListResponse:
-    """List registered accounts. ADMIN only. Does not return password hashes."""
+    """List registered accounts with search/filters. ADMIN only. No password hashes."""
     del current_user  # authorization already enforced
-    total = session.scalar(select(func.count()).select_from(User)) or 0
-    total_pages = math.ceil(total / page_size) if total else 0
-    users = list(
-        session.scalars(
-            select(User)
-            .order_by(User.created_at.desc(), User.id.desc())
-            .offset((page - 1) * page_size)
-            .limit(page_size)
-        ).all()
-    )
-    return AdminUserListResponse(
-        results=[AdminUserSummary.model_validate(u) for u in users],
+    if role is not None and role.upper() not in {"ADMIN", "OWNER", "VIEWER"}:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="role must be ADMIN, OWNER, or VIEWER",
+        )
+    if promotion_status is not None and promotion_status.upper() not in {
+        "PENDING",
+        "APPROVED",
+        "REJECTED",
+        "NONE",
+    }:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="promotion_status must be PENDING, APPROVED, REJECTED, or NONE",
+        )
+    return list_admin_users(
+        session,
         page=page,
         page_size=page_size,
-        total=total,
-        total_pages=total_pages,
+        filters=AdminUserListFilters(
+            q=q,
+            role=role,
+            is_active=is_active,
+            promotion_status=promotion_status,
+        ),
     )
+
+
+@router.get("/users/{user_id}", response_model=AdminUserProfileResponse)
+def get_user_profile_admin(
+    user_id: uuid.UUID = Path(...),
+    current_user: User = Depends(require_admin),
+    session: Session = Depends(get_db),
+) -> AdminUserProfileResponse:
+    """Inspect one registered account. ADMIN only. Never returns secrets or file bytes."""
+    del current_user
+    profile = get_admin_user_profile(session, user_id=user_id)
+    if profile is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
+    return profile
 
 
 def _active_admin_count(session: Session) -> int:
@@ -180,7 +213,7 @@ def update_user_status(
             request_id=request_id,
             metadata={"is_active": body.is_active},
         )
-        return AdminUserSummary.model_validate(target)
+        return summarize_admin_user(session, target)
 
     target.is_active = body.is_active
     session.flush()
@@ -202,7 +235,82 @@ def update_user_status(
             detail="User status update could not be audited",
         ) from exc
 
-    return AdminUserSummary.model_validate(target)
+    return summarize_admin_user(session, target)
+
+
+@router.patch("/users/{user_id}/role", response_model=AdminUserSummary)
+def update_user_role_admin(
+    body: AdminUserRoleUpdateRequest,
+    user_id: uuid.UUID = Path(...),
+    current_user: User = Depends(require_admin),
+    session: Session = Depends(get_db),
+    x_request_id: str | None = Header(default=None, alias="X-Request-ID"),
+) -> AdminUserSummary:
+    """Assign platform role ADMIN / OWNER / VIEWER. ADMIN only. Audited."""
+    request_id = (x_request_id or str(uuid.uuid4())).strip() or str(uuid.uuid4())
+    previous_role = None
+    target = session.get(User, user_id)
+    if target is not None:
+        previous_role = target.role
+    try:
+        updated = update_user_role(
+            session,
+            admin=current_user,
+            user_id=user_id,
+            new_role=body.role.upper(),
+        )
+    except PromotionError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=exc.message) from None
+
+    try:
+        append_audit_event(
+            session,
+            action="ADMIN_USER_ROLE_UPDATE",
+            outcome="SUCCESS",
+            actor_id=current_user.id,
+            target_user_id=updated.id,
+            reason_code="ROLE_CHANGED" if previous_role != updated.role else "NO_CHANGES",
+            request_id=request_id,
+            metadata={"previous_role": previous_role, "role": updated.role},
+        )
+    except Exception as exc:
+        logger.exception("Audit failed after role update")
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Role update could not be audited",
+        ) from exc
+
+    return summarize_admin_user(session, updated)
+
+
+@router.get("/audit/document-views", response_model=DocumentViewActivityListResponse)
+def list_document_view_activity_admin(
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=20, ge=1, le=100),
+    q: str | None = Query(
+        default=None,
+        max_length=200,
+        description="Search document title, owner name, or owner email",
+    ),
+    owner_id: uuid.UUID | None = Query(default=None),
+    viewer_id: uuid.UUID | None = Query(default=None),
+    created_from: datetime | None = Query(default=None),
+    created_to: datetime | None = Query(default=None),
+    current_user: User = Depends(require_admin),
+    session: Session = Depends(get_db),
+) -> DocumentViewActivityListResponse:
+    """Platform-wide document view counts. ADMIN only — never returns file bytes."""
+    del current_user
+    return list_admin_document_view_activity(
+        session,
+        page=page,
+        page_size=page_size,
+        q=q,
+        owner_id=owner_id,
+        viewer_id=viewer_id,
+        created_from=created_from,
+        created_to=created_to,
+    )
 
 
 @router.get("/audit/events", response_model=AuditEventListResponse)
@@ -212,6 +320,10 @@ def list_audit_events_admin(
     actor_id: uuid.UUID | None = Query(default=None),
     action: str | None = Query(default=None),
     document_id: uuid.UUID | None = Query(default=None),
+    owner_id: uuid.UUID | None = Query(
+        default=None,
+        description="Filter events for documents owned by this user",
+    ),
     outcome: str | None = Query(default=None),
     created_from: datetime | None = Query(default=None),
     created_to: datetime | None = Query(default=None),
@@ -232,12 +344,13 @@ def list_audit_events_admin(
         actor_id=actor_id,
         action=action,
         document_id=document_id,
+        owner_id=owner_id,
         outcome=outcome,
         created_from=created_from,
         created_to=created_to,
     )
     return AuditEventListResponse(
-        results=[_event_response(e) for e in result.items],
+        results=enrich_audit_event_responses(session, result.items),
         page=result.page,
         page_size=result.page_size,
         total=result.total,

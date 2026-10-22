@@ -3,11 +3,12 @@ import { describe, expect, it } from "vitest";
 import {
   DOCX_MIME_TYPE,
   MAX_UPLOAD_BYTES,
+  PDF_MIME_TYPE,
   validateUploadFileClient,
 } from "@/lib/upload-rules";
 
 describe("validateUploadFileClient", () => {
-  it("rejects missing, empty, oversized, and non-DOCX types", () => {
+  it("rejects missing, empty, oversized, PDF, and unsupported types", () => {
     expect(validateUploadFileClient(null)).toMatch(/choose a file/i);
     expect(
       validateUploadFileClient(
@@ -26,22 +27,22 @@ describe("validateUploadFileClient", () => {
       validateUploadFileClient(
         new File(["x"], "notes.exe", { type: "application/octet-stream" }),
       ),
-    ).toMatch(/DOCX/i);
-
-    expect(
-      validateUploadFileClient(
-        new File(["%PDF"], "a.pdf", { type: "application/pdf" }),
-      ),
-    ).toMatch(/DOCX/i);
+    ).toMatch(/Only DOCX/i);
 
     expect(
       validateUploadFileClient(
         new File(["x"], "a.png", { type: "image/png" }),
       ),
-    ).toMatch(/DOCX/i);
+    ).toMatch(/Only DOCX/i);
+
+    expect(
+      validateUploadFileClient(
+        new File(["%PDF"], "a.pdf", { type: PDF_MIME_TYPE }),
+      ),
+    ).toMatch(/Only DOCX/i);
   });
 
-  it("accepts a typical DOCX selection (client-side only)", () => {
+  it("accepts DOCX selections (client-side only)", () => {
     expect(
       validateUploadFileClient(
         new File(["PK"], "report.docx", { type: DOCX_MIME_TYPE }),

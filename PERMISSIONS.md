@@ -28,30 +28,31 @@ Token role claims and client-supplied owner/permission fields are never treated 
 
 ## Permission matrix
 
-| Principal | List / discover | Read metadata / download | Edit metadata | Edit DOCX content (`PUT …/content`) | Grant / revoke | Soft-delete | Admin APIs |
+| Principal | List / discover | Read metadata / download | Edit metadata | Edit content (`PUT …/content`) | Grant / revoke | Soft-delete | Admin APIs |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | Document owner (`owner_id`) | Yes | Yes | Yes | Yes | Yes | Yes | No (unless platform role ADMIN) |
 | Active READ grant | Yes (that doc) | Yes | No | No | No | No | No |
-| Active EDIT grant | Yes (that doc) | Yes | Yes (title/category/description) | Yes | No | No | No |
+| Active EDIT grant | Yes (that doc) | Yes | No (owner only) | Yes | No | No | No |
 | No active grant | No | No | No | No | No | No | No |
-| Platform ADMIN without grant | No | No | No | No | No | No | Yes (users/audit only) |
+| Platform ADMIN without grant | No | No | No | No | No | No | Yes (users/audit/promotions only) |
 | Inactive account | No protected actions | | | | | | |
 
 Denial policy: inaccessible documents → **404**; insufficient action with a visible relationship → **403**; unauthenticated/inactive → **401**.
 
 Security regression matrix: `backend/tests/security/`.
 
-### Owner vs EDIT grantee (metadata)
+### Owner vs EDIT grantee (metadata vs content)
 
-- **Owner:** may PATCH `title`, `category`, `description`; may grant/revoke; may DELETE (soft-delete).
-- **EDIT grantee:** may PATCH the same three fields only. Cannot change `owner_id`, `storage_key`, size/checksum/MIME, deletion state, or permissions. Cannot DELETE or share.
+- **Owner:** may PATCH `title`, `category`, `description`; may grant/revoke; may DELETE (soft-delete); may edit content.
+- **EDIT grantee:** may edit document **contents** only (`PUT …/content` for DOCX). Cannot change title/category/description, `owner_id`, `storage_key`, size/checksum/MIME, deletion state, or permissions. Cannot DELETE or share.
 
 ### Metadata PATCH
 
 - Route: `PATCH /documents/{document_id}`
 - Service: `update_document_metadata` → `evaluate_document_access(EDIT_METADATA)` after `SELECT … FOR UPDATE`
+- **Owner only** — active EDIT grants do not permit title/category/description changes
 - Forbidden fields rejected via schema `extra=forbid` and `reject_protected_metadata_fields`
-- Revoked EDIT grant denied on the next PATCH (same JWT still valid)
+- Non-owners with a grant receive **403**; no relationship → **404**
 
 ### Soft-delete
 
@@ -134,6 +135,30 @@ Durable SHA-256 hash chain in `audit_events` (`app.services.audit_trail`):
 - DENIED uses a **separate committed session** so rolling back the protected-operation transaction does not erase the denial. If that independent write fails, the denial HTTP response is still returned and the event is **not** claimed persisted.
 - No ordinary API can PATCH/DELETE historical audit rows.
 - Admin audit listing never grants document content permission.
+- Passwords, tokens, file bytes, and storage keys are stripped from metadata at write time.
+
+### Event types (selected)
+
+| Action | When |
+| --- | --- |
+| `DOCUMENT_UPLOAD` | Upload accepted or rejected |
+| `DOCUMENT_VIEW` | Authorised inline preview request (not proof of reading) |
+| `DOCUMENT_DOWNLOAD` | Authorised attachment download |
+| `DOCUMENT_CONTENT_UPDATE` / `DOCUMENT_METADATA_UPDATE` | Content or owner metadata change |
+| `DOCUMENT_DELETE` | Soft-delete |
+| `DOCUMENT_PERMISSION_GRANT` / `REVOKE` | Owner grant/revoke; metadata includes `permission` and `target_user_id` |
+| `OWNER_PROMOTION_REQUEST` / `REVIEW` | Viewer requests and admin decisions |
+| `LOGIN` / `REGISTER` | Auth success and relevant failures |
+| `ADMIN_USER_STATUS_UPDATE` / `ROLE_UPDATE` | Admin account changes |
+
+### Dashboards
+
+- **Owner** `GET /documents/{id}/audit` — owner-only; summary counts + timeline with actor/target identities; guessing another owner's document ID is denied.
+- **Admin** `GET /admin/audit/events` — platform-wide filters: actor, document, **owner**, action, outcome, date range. Metadata only; never file bytes.
+
+### Integrity limits
+
+The same-database hash chain detects many in-place row edits when an attacker cannot rewrite the whole table consistently. A privileged DBA who can UPDATE/DELETE/INSERT freely (or truncate the chain tail without an external head anchor) can still forge a valid-looking chain. External anchoring / WORM storage is not implemented.
 
 ## Tests
 
@@ -143,11 +168,23 @@ Durable SHA-256 hash chain in `audit_events` (`app.services.audit_trail`):
 - `tests/test_document_mutations.py` — PATCH/DELETE, R2 failure honesty, revoke-then-edit
 - `tests/test_user_search.py` — auth, matching, inactive/self exclusion, pagination, sensitive fields
 - `tests/test_audit_trail.py` — hash/link/tamper/empty/concurrent/admin filters/non-admin denial
+- `tests/test_document_audit_dashboard.py` — view/download counts, owner IDOR, admin owner filter, grant identity
 - `tests/security/test_security_matrix.py` — owner / READ / EDIT / unrelated / ADMIN matrix
 - `tests/security/test_role_permission_separation.py` — platform role ≠ document grant; Part 5 regressions
+
+## Document formats (upload / preview / edit / download)
+
+| Format | Upload | Preview | In-app content edit | Download |
+| --- | --- | --- | --- | --- |
+| **DOCX** | **Yes only** (extension + MIME + OOXML ZIP structure) | Yes (mammoth HTML) | **Yes (limited)** — body text rewritten; other package parts preserved when possible; body tables/images simplified | Genuine conversion to PDF (LibreOffice when installed; otherwise ReportLab text/table fallback) |
+| **PDF** | **Rejected** (415) | Legacy rows only | **No** (415) | Legacy rows streamed as PDF; new docs always convert from DOCX |
+
+Downloads never rename `.docx` to `.pdf`. Conversion uses private temp directories that are deleted after use. Preview and download always re-check current grants. Previously downloaded PDF copies cannot be remotely revoked.
 
 ## Remaining gaps
 
 - Automated orphan R2 cleanup worker after failed storage delete
 - Token logout/revocation
 - External chain-head anchoring (silent tail truncation / full DBA rewrite)
+- Full-fidelity DOCX→PDF without LibreOffice (fallback omits images and complex layout)
+- Full-fidelity in-browser Word editing (body tables/images/drawings are simplified on save)

@@ -25,6 +25,7 @@ export function getNavItemsForRole(role: UserRole): NavItem[] {
     return [
       { label: "Dashboard", href: "/dashboard", available: true },
       { label: "My Documents", href: "/documents", available: true },
+      { label: "Document activity", href: "/activity", available: true },
       { label: "Shared with me", href: "/shared", available: true },
       { label: "Upload", href: "/documents/upload", available: true },
     ];
@@ -33,6 +34,7 @@ export function getNavItemsForRole(role: UserRole): NavItem[] {
   if (role === "VIEWER") {
     return [
       { label: "Shared with me", href: "/shared", available: true },
+      { label: "Request owner access", href: "/request-owner", available: true },
     ];
   }
 
@@ -40,6 +42,8 @@ export function getNavItemsForRole(role: UserRole): NavItem[] {
   return [
     { label: "Overview", href: "/admin", available: true },
     { label: "Users", href: "/admin/users", available: true },
+    { label: "Owner requests", href: "/admin/promotions", available: true },
+    { label: "Document views", href: "/admin/audit/views", available: true },
     { label: "Audit Logs", href: "/admin/audit", available: true },
     { label: "Audit Integrity", href: "/admin/audit?focus=integrity", available: true },
   ];

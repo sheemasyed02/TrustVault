@@ -444,6 +444,7 @@ def test_login_failure_creates_denied_audit_event(
     # Persist the user in a committed session so login can authenticate lookup
     # and the independent denial writer can attribute actor_id.
     email = f"login-bad-{uuid.uuid4()}@example.com"
+    user_id = None
     writer = get_session_factory()()
     try:
         user = User(
@@ -459,23 +460,40 @@ def test_login_failure_creates_denied_audit_event(
     finally:
         writer.close()
 
-    bad = client.post(
-        "/auth/login",
-        json={"email": email, "password": "wrong-password-xx"},
-    )
-    assert bad.status_code == 401
-    denied = db_session.scalar(
-        select(AuditEvent)
-        .where(
-            AuditEvent.action == "LOGIN",
-            AuditEvent.outcome == "DENIED",
-            AuditEvent.actor_id == user_id,
-            AuditEvent.reason_code == "INVALID_CREDENTIALS",
+    try:
+        bad = client.post(
+            "/auth/login",
+            json={"email": email, "password": "wrong-password-xx"},
         )
-        .order_by(AuditEvent.created_at.desc())
-        .limit(1)
-    )
-    assert denied is not None
-    meta = denied.metadata_json or {}
-    assert "password" not in meta
-    assert "token" not in meta
+        assert bad.status_code == 401
+        denied = db_session.scalar(
+            select(AuditEvent)
+            .where(
+                AuditEvent.action == "LOGIN",
+                AuditEvent.outcome == "DENIED",
+                AuditEvent.actor_id == user_id,
+                AuditEvent.reason_code == "INVALID_CREDENTIALS",
+            )
+            .order_by(AuditEvent.created_at.desc())
+            .limit(1)
+        )
+        assert denied is not None
+        meta = denied.metadata_json or {}
+        assert "password" not in meta
+        assert "token" not in meta
+    finally:
+        # Independently committed user + DENIED audit must not pollute the live DB.
+        cleaner = get_session_factory()()
+        try:
+            if user_id is not None:
+                cleaner.execute(
+                    text("DELETE FROM audit_events WHERE actor_id = :uid"),
+                    {"uid": str(user_id)},
+                )
+                cleaner.execute(
+                    text("DELETE FROM users WHERE id = :uid"),
+                    {"uid": str(user_id)},
+                )
+                cleaner.commit()
+        finally:
+            cleaner.close()

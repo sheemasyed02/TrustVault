@@ -60,7 +60,11 @@ def test_admin_with_explicit_read_grant_can_download(
     assert meta.json()["your_access"] == "READ"
     assert client.get("/users/me", headers=headers).json()["role"] == "ADMIN"
 
-    download = client.get(f"/documents/{doc.id}/download", headers=headers)
+    download = client.get(
+        f"/documents/{doc.id}/download",
+        params={"disposition": "inline"},
+        headers=headers,
+    )
     assert download.status_code == 200
     assert download.content == DOCX_BYTES
 
@@ -132,7 +136,7 @@ def test_viewer_read_can_download_not_edit_metadata(
     assert me["role"] == "VIEWER"
 
 
-def test_viewer_edit_can_patch_metadata_not_share_or_delete(
+def test_viewer_edit_can_put_content_not_metadata_share_or_delete(
     client: TestClient,
     db_session: Session,
     auth_settings: Settings,
@@ -153,8 +157,15 @@ def test_viewer_edit_can_patch_metadata_not_share_or_delete(
         headers=headers,
         json={"title": "Editor Ok", "category": "Legal"},
     )
-    assert patched.status_code == 200
-    assert patched.json()["your_access"] == "EDIT"
+    assert patched.status_code == 403
+
+    content = client.put(
+        f"/documents/{doc.id}/content",
+        headers=headers,
+        json={"text": "Editor Ok"},
+    )
+    assert content.status_code == 200
+    assert content.json()["your_access"] == "EDIT"
 
     assert (
         client.post(

@@ -26,6 +26,7 @@ interface FilterState {
   actor_id: string;
   action: string;
   document_id: string;
+  owner_id: string;
   outcome: "" | "SUCCESS" | "DENIED";
   created_from: string;
   created_to: string;
@@ -35,10 +36,20 @@ const emptyFilters: FilterState = {
   actor_id: "",
   action: "",
   document_id: "",
+  owner_id: "",
   outcome: "",
   created_from: "",
   created_to: "",
 };
+
+function displayUser(
+  id: string | null,
+  name?: string | null,
+  email?: string | null,
+): string {
+  if (email) return name ? `${name} <${email}>` : email;
+  return id ?? "—";
+}
 
 export default function AdminAuditPage() {
   return (
@@ -83,6 +94,7 @@ function AdminAuditPageContent() {
         actor_id: nextFilters.actor_id.trim() || undefined,
         action: nextFilters.action.trim() || undefined,
         document_id: nextFilters.document_id.trim() || undefined,
+        owner_id: nextFilters.owner_id.trim() || undefined,
         outcome: nextFilters.outcome || undefined,
         created_from: nextFilters.created_from
           ? new Date(nextFilters.created_from).toISOString()
@@ -164,8 +176,11 @@ function AdminAuditPageContent() {
             Audit log
           </h1>
           <p className="mt-2 text-sm text-muted">
-            Metadata only — never document bytes. Timestamps are shown in your
-            local timezone; the API stores UTC.
+            Platform-wide metadata only — never confidential document contents.
+            Timestamps are shown in your local timezone; the API stores UTC.
+            Hash-chain integrity detects many in-place edits but is not
+            tamper-proof against a privileged database administrator who can
+            rewrite the whole table.
           </p>
         </div>
         <button
@@ -282,6 +297,19 @@ function AdminAuditPageContent() {
         </label>
         <label className="text-sm">
           <span className="text-xs uppercase tracking-wide text-muted">
+            Owner ID
+          </span>
+          <input
+            value={filters.owner_id}
+            onChange={(e) =>
+              setFilters((prev) => ({ ...prev, owner_id: e.target.value }))
+            }
+            className="mt-1 w-full rounded-md border border-border px-3 py-2"
+            placeholder="Document owner UUID"
+          />
+        </label>
+        <label className="text-sm">
+          <span className="text-xs uppercase tracking-wide text-muted">
             Outcome
           </span>
           <select
@@ -377,6 +405,7 @@ function AdminAuditPageContent() {
                 <th className="px-3 py-3 font-semibold">Action</th>
                 <th className="px-3 py-3 font-semibold">Outcome</th>
                 <th className="px-3 py-3 font-semibold">Actor</th>
+                <th className="px-3 py-3 font-semibold">Target</th>
                 <th className="px-3 py-3 font-semibold">Document</th>
                 <th className="px-3 py-3 font-semibold">Reason</th>
               </tr>
@@ -389,6 +418,11 @@ function AdminAuditPageContent() {
                   </td>
                   <td className="px-3 py-3 font-medium text-foreground">
                     {event.action}
+                    {typeof event.metadata?.permission === "string" ? (
+                      <span className="mt-0.5 block text-xs font-normal text-muted">
+                        {event.metadata.permission}
+                      </span>
+                    ) : null}
                   </td>
                   <td className="px-3 py-3">
                     <span
@@ -401,8 +435,19 @@ function AdminAuditPageContent() {
                       {event.outcome}
                     </span>
                   </td>
-                  <td className="px-3 py-3 break-all font-mono text-[11px] text-muted">
-                    {event.actor_id ?? "—"}
+                  <td className="px-3 py-3 text-xs text-muted">
+                    {displayUser(
+                      event.actor_id,
+                      event.actor_name,
+                      event.actor_email,
+                    )}
+                  </td>
+                  <td className="px-3 py-3 text-xs text-muted">
+                    {displayUser(
+                      event.target_user_id,
+                      event.target_user_name,
+                      event.target_user_email,
+                    )}
                   </td>
                   <td className="px-3 py-3 break-all font-mono text-[11px] text-muted">
                     {event.document_id ?? "—"}

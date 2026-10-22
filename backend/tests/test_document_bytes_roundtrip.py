@@ -187,13 +187,15 @@ def test_upload_download_bytes_identical_and_sha256_matches(
 
     download = client.get(f"/documents/{created['id']}/download", headers=headers)
     assert download.status_code == 200
-    assert download.content == KNOWN_DOCX
-    assert download.content == stored_bytes
-    assert sha256_hex_bytes(download.content) == expected_sha
-    assert download.headers["content-type"].startswith(DOCX_CONTENT_TYPE)
-    assert 'filename="quarterly-report.docx"' in download.headers["content-disposition"]
+    # Attachment downloads convert DOCX → PDF.
+    assert download.content.startswith(b"%PDF")
+    assert download.headers["content-type"].startswith("application/pdf")
+    assert 'filename="quarterly-report.pdf"' in download.headers["content-disposition"]
     assert download.headers["content-disposition"].startswith("attachment;")
     assert download.headers["x-content-type-options"] == "nosniff"
+    # Stored object remains original DOCX bytes.
+    assert stored_bytes == KNOWN_DOCX
+    assert sha256_hex_bytes(stored_bytes) == expected_sha
 
 
 def test_preview_inline_returns_same_docx_bytes(
@@ -279,7 +281,13 @@ def test_revoked_grant_denied_on_next_download(
     reader_headers = _auth(reader, auth_settings)
     ok = client.get(f"/documents/{doc_id}/download", headers=reader_headers)
     assert ok.status_code == 200
-    assert ok.content == KNOWN_DOCX
+    assert ok.content.startswith(b"%PDF")
+    inline = client.get(
+        f"/documents/{doc_id}/download",
+        params={"disposition": "inline"},
+        headers=reader_headers,
+    )
+    assert inline.content == KNOWN_DOCX
 
     from datetime import datetime, timezone
 

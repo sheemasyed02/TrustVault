@@ -123,7 +123,7 @@ export function DocumentTable({
                       disabled={downloadingId === doc.id}
                       className="rounded-md border border-border px-2 py-1 text-xs font-semibold hover:bg-accent-soft disabled:opacity-60"
                     >
-                      {downloadingId === doc.id ? "Downloading…" : "Download"}
+                      {downloadingId === doc.id ? "Downloading…" : "Download PDF"}
                     </button>
                     {isOwner && onDelete ? (
                       <button

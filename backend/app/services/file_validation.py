@@ -1,12 +1,11 @@
 """Upload file validation for TrustVault.
 
-TrustVault is a confidential *document* sharing system. Only Microsoft Word
-DOCX uploads are accepted so owners and EDIT grantees work with editable
-office documents (view/edit locally after authorized download; metadata edits
-in-app). PDF/PNG/JPEG are rejected at upload.
+Accepts Microsoft Word DOCX uploads only. Structure checks supplement
+extension checks. This is not malware scanning and does not prove a file is
+safe to open.
 
-Allowed types use structure checks in addition to extension.
-This is not malware scanning and does not prove a file is safe to open.
+``PDF_MEDIA_TYPE`` remains defined for legacy stored documents and PDF download
+responses; new uploads must be DOCX.
 """
 
 from __future__ import annotations
@@ -23,12 +22,36 @@ ALLOWED_EXTENSIONS = frozenset({".docx"})
 DOCX_MEDIA_TYPE = (
     "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
 )
+# Kept for legacy rows and PDF download Content-Type — not an upload allowlist entry.
+PDF_MEDIA_TYPE = "application/pdf"
 
 MEDIA_BY_EXTENSION = {
     ".docx": DOCX_MEDIA_TYPE,
 }
 
 ZIP_SIGNATURE = b"PK\x03\x04"
+
+# Explicitly rejected extensions (clearer errors than a generic allowlist miss).
+REJECTED_EXTENSIONS = frozenset(
+    {
+        ".pdf",
+        ".doc",
+        ".docm",
+        ".dot",
+        ".dotx",
+        ".rtf",
+        ".odt",
+        ".exe",
+        ".bat",
+        ".cmd",
+        ".ps1",
+        ".js",
+        ".msi",
+        ".dll",
+        ".com",
+        ".scr",
+    }
+)
 
 
 class FileValidationError(Exception):
@@ -54,9 +77,15 @@ def normalize_extension(filename: str | None) -> str:
             "Filename with a .docx extension is required",
             reason_code="MISSING_FILENAME",
         )
-    # Use only the final suffix; ignore client path segments.
     name = Path(filename.replace("\\", "/").split("/")[-1]).name
     ext = Path(name).suffix.lower()
+    if ext in REJECTED_EXTENSIONS:
+        raise FileValidationError(
+            "Only DOCX documents are supported. PDF, legacy Word (.doc/.docm), "
+            "and executable formats are not accepted for upload.",
+            status_code=415,
+            reason_code="UNSUPPORTED_EXTENSION",
+        )
     if ext not in ALLOWED_EXTENSIONS:
         raise FileValidationError(
             "Only DOCX documents are supported",
@@ -72,7 +101,6 @@ def _is_docx(data: bytes) -> bool:
     try:
         with zipfile.ZipFile(BytesIO(data)) as archive:
             names = set(archive.namelist())
-            # Reject path traversal style members.
             for name in names:
                 if name.startswith("/") or ".." in Path(name).parts:
                     return False
@@ -80,7 +108,6 @@ def _is_docx(data: bytes) -> bool:
                 return False
             if "word/document.xml" not in names:
                 return False
-            # Ensure we can read the core document part without extracting to disk.
             with archive.open("word/document.xml") as part:
                 head = part.read(256)
                 if not head:

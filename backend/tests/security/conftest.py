@@ -28,11 +28,31 @@ from app.services.file_validation import DOCX_MEDIA_TYPE
 from app.services.upload_audit import RecordingUploadAuditHook
 
 TEST_JWT_SECRET = "security-matrix-jwt-secret-key-32b-min"
-DOCX_BYTES = (
-    b"PK\x03\x04"
-    + b"security-matrix-docx-marker"
-    + b"\x00" * 32
-)
+
+
+def _minimal_docx_bytes() -> bytes:
+    """Valid minimal DOCX (ZIP) for upload/download/conversion tests."""
+    import io
+    import zipfile
+
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w") as archive:
+        archive.writestr(
+            "[Content_Types].xml",
+            '<?xml version="1.0"?><Types xmlns="http://schemas.openxmlformats.org/'
+            'package/2006/content-types"></Types>',
+        )
+        archive.writestr(
+            "word/document.xml",
+            '<?xml version="1.0"?><w:document xmlns:w="http://schemas.openxmlformats.org/'
+            'wordprocessingml/2006/main"><w:body>'
+            '<w:p><w:r><w:t>security-matrix-docx-marker</w:t></w:r></w:p>'
+            "</w:body></w:document>",
+        )
+    return buffer.getvalue()
+
+
+DOCX_BYTES = _minimal_docx_bytes()
 
 
 @pytest.fixture()

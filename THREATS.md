@@ -167,8 +167,17 @@ Tests cited below are real modules under `backend/tests/` (including `tests/secu
 | --- | --- |
 | **Impact** | ADMIN role used to read all files |
 | **Mitigation** | ADMIN gets user/audit APIs only. Document content still requires ownership or grant. Last-active-admin cannot be deactivated |
-| **Tests** | Matrix admin audit without content; `test_admin_users.py` |
+| **Tests** | Matrix admin audit without content; `test_admin_users.py`; `test_document_view_counts.py` |
 | **Residual** | Malicious ADMIN can still deactivate users / inspect audit metadata |
+
+### 17b. Document view-count interpretation
+
+| | |
+| --- | --- |
+| **Impact** | Inflated or misleading “who read this” claims |
+| **Mitigation** | Only `GET /documents/{id}/download?disposition=inline` after server-side `require_document_read` records `DOCUMENT_VIEW` SUCCESS. Metadata/list GETs and attachment downloads do not count as views. Same actor+document within 45s is deduped. UI states counts are authorised preview requests, not proof of reading |
+| **Tests** | `test_document_view_counts.py`; owner/admin dashboards |
+| **Residual** | Dedupe can under-count rapid legitimate re-opens; hash-chain audit rows remain editable by a privileged DBA (see §13) |
 
 ### 18. Secret exposure (Git, logs, frontend)
 

@@ -23,9 +23,9 @@ describe("getNavItemsForRole", () => {
     expect(items.every((item) => item.available)).toBe(true);
   });
 
-  it("gives viewers only shared documents", () => {
+  it("gives viewers shared documents and owner request", () => {
     const labels = getNavItemsForRole("VIEWER").map((item) => item.label);
-    expect(labels).toEqual(["Shared with me"]);
+    expect(labels).toEqual(["Shared with me", "Request owner access"]);
     expect(labels).not.toContain("Upload");
     expect(labels).not.toContain("Admin");
   });
@@ -35,6 +35,7 @@ describe("getNavItemsForRole", () => {
     expect(adminLabels).toEqual([
       "Overview",
       "Users",
+      "Owner requests",
       "Audit Logs",
       "Audit Integrity",
     ]);

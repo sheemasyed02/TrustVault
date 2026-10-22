@@ -6,6 +6,7 @@ import { useEffect, useState } from "react";
 
 import { useAuth, useHandleUnauthorized } from "@/components/auth-provider";
 import { ConfirmDialog } from "@/components/confirm-dialog";
+import { DocumentAuditPanel } from "@/components/document-audit-panel";
 import { DocumentMetadataForm } from "@/components/document-metadata-form";
 import { DocumentPermissionsPanel } from "@/components/document-permissions-panel";
 import { DocumentPreview } from "@/components/document-preview";
@@ -140,9 +141,9 @@ export default function DocumentDetailPage() {
             </h1>
             <p className="mt-2 text-sm text-muted">
               {access.isOwner
-                ? "You own this document — you can view, edit, share, and delete."
+                ? "You own this document — you can view, edit content and metadata, share, and delete."
                 : access.yourAccess === "EDIT"
-                  ? `Shared by ${doc.owner.name} with EDIT access — you can view and edit content and metadata.`
+                  ? `Shared by ${doc.owner.name} with EDIT access — you can view and edit document contents. Metadata, sharing, and delete remain owner-only.`
                   : `Shared by ${doc.owner.name} with READ access — view and download only.`}
             </p>
             <p className="mt-1 text-xs font-semibold uppercase tracking-wide text-accent-strong">
@@ -154,12 +155,20 @@ export default function DocumentDetailPage() {
             </p>
 
             <dl className="mt-6 grid gap-4 sm:grid-cols-2">
+              <Detail
+                label="Original filename"
+                value={
+                  doc.original_filename?.trim()
+                    ? doc.original_filename
+                    : "—"
+                }
+              />
               <Detail label="Category" value={doc.category} />
               <Detail label="Type" value={mimeLabel(doc.mime_type)} />
               <Detail label="Size" value={formatBytes(doc.file_size)} />
               <Detail label="Created" value={formatDateTime(doc.created_at)} />
               <Detail label="Updated" value={formatDateTime(doc.updated_at)} />
-              <Detail label="Owner email" value={doc.owner.email} />
+              <Detail label="Owner" value={`${doc.owner.name} (${doc.owner.email})`} />
               <Detail label="Checksum" value={doc.sha256_checksum} />
               <Detail
                 label="Description"
@@ -174,7 +183,9 @@ export default function DocumentDetailPage() {
                 disabled={actions.downloadingId === doc.id}
                 className="rounded-md bg-accent px-4 py-2 text-sm font-semibold text-white hover:bg-accent-strong disabled:opacity-60"
               >
-                {actions.downloadingId === doc.id ? "Downloading…" : "Download"}
+                {actions.downloadingId === doc.id
+                  ? "Downloading…"
+                  : "Download PDF"}
               </button>
               {access.canDelete ? (
                 <button
@@ -201,11 +212,11 @@ export default function DocumentDetailPage() {
 
           <DocumentPreview
             document={doc}
-            canEdit={access.canEditDocument}
+            canEdit={access.canEditContent}
             onDocumentUpdated={setDoc}
           />
 
-          {access.canEditDocument ? (
+          {access.canEditMetadata ? (
             <DocumentMetadataForm
               document={doc}
               canEdit
@@ -215,8 +226,8 @@ export default function DocumentDetailPage() {
             <section className="rounded-xl border border-border bg-surface p-5 text-sm text-muted">
               <h2 className="font-display text-xl text-foreground">Metadata</h2>
               <p className="mt-2">
-                You have READ access. Metadata editing requires EDIT permission
-                from the owner.
+                Only the document owner can change title, category, or
+                description.
               </p>
             </section>
           )}
@@ -226,6 +237,10 @@ export default function DocumentDetailPage() {
             canManage={access.canManageSharing}
             ownerUserId={doc.owner.id}
           />
+
+          {access.isOwner ? (
+            <DocumentAuditPanel documentId={doc.id} />
+          ) : null}
         </>
       ) : null}
 

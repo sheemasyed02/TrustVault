@@ -174,7 +174,7 @@ def test_edit_grantee_can_read(db_session: Session):
     assert require_document_read(db_session, user=editor, document_id=doc.id).id == doc.id
 
 
-def test_edit_grantee_can_edit_metadata(db_session: Session):
+def test_edit_grantee_cannot_edit_metadata(db_session: Session):
     owner = _user(db_session, role="OWNER")
     editor = _user(db_session, role="VIEWER")
     doc = _document(db_session, owner)
@@ -185,7 +185,30 @@ def test_edit_grantee_can_edit_metadata(db_session: Session):
         permission="EDIT",
         granted_by=owner,
     )
-    assert require_document_edit(db_session, user=editor, document_id=doc.id).id == doc.id
+    with pytest.raises(DocumentAuthorizationError) as exc:
+        require_document_edit(db_session, user=editor, document_id=doc.id)
+    assert exc.value.status_code == 403
+
+
+def test_edit_grantee_can_edit_content(db_session: Session):
+    from app.services.document_authorization import require_document_content_edit
+
+    owner = _user(db_session, role="OWNER")
+    editor = _user(db_session, role="VIEWER")
+    doc = _document(db_session, owner)
+    _grant(
+        db_session,
+        document=doc,
+        user=editor,
+        permission="EDIT",
+        granted_by=owner,
+    )
+    assert (
+        require_document_content_edit(
+            db_session, user=editor, document_id=doc.id
+        ).id
+        == doc.id
+    )
 
 
 def test_edit_grantee_cannot_share_or_revoke(db_session: Session):

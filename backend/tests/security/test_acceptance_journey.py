@@ -117,7 +117,15 @@ def test_acceptance_owner_share_revoke_edit_admin_journey(
     assert meta.json()["your_access"] == "READ"
     download = client.get(f"/documents/{doc_id}/download", headers=recipient_headers)
     assert download.status_code == 200
-    assert download.content == content
+    assert download.content.startswith(b"%PDF")
+    assert download.headers["content-type"].startswith("application/pdf")
+    inline = client.get(
+        f"/documents/{doc_id}/download",
+        params={"disposition": "inline"},
+        headers=recipient_headers,
+    )
+    assert inline.status_code == 200
+    assert inline.content == content
 
     assert (
         client.patch(
@@ -148,7 +156,7 @@ def test_acceptance_owner_share_revoke_edit_admin_journey(
     assert denied.status_code == 404
     storage_mock.open_object.assert_not_called()
 
-    # 10–11: Grant EDIT; metadata OK; share/delete still forbidden.
+    # 10–11: Grant EDIT; content OK; metadata/share/delete still forbidden.
     grant_edit = client.post(
         f"/documents/{doc_id}/permissions",
         headers=owner_headers,
@@ -160,9 +168,14 @@ def test_acceptance_owner_share_revoke_edit_admin_journey(
         headers=recipient_headers,
         json={"title": "Edited By Recipient", "category": "Legal"},
     )
-    assert patched.status_code == 200
-    assert patched.json()["title"] == "Edited By Recipient"
-    assert patched.json()["your_access"] == "EDIT"
+    assert patched.status_code == 403
+    content_edit = client.put(
+        f"/documents/{doc_id}/content",
+        headers=recipient_headers,
+        json={"text": "Edited By Recipient"},
+    )
+    assert content_edit.status_code == 200
+    assert content_edit.json()["your_access"] == "EDIT"
     assert (
         client.post(
             f"/documents/{doc_id}/permissions",
@@ -178,10 +191,12 @@ def test_acceptance_owner_share_revoke_edit_admin_journey(
     assert ("DOCUMENT_UPLOAD", "SUCCESS") in actions
     assert ("DOCUMENT_PERMISSION_GRANT", "SUCCESS") in actions
     assert ("DOCUMENT_PERMISSION_REVOKE", "SUCCESS") in actions
-    assert ("DOCUMENT_DOWNLOAD", "DENIED") in actions or (
-        "DOCUMENT_DOWNLOAD",
-        "SUCCESS",
-    ) in actions
+    assert (
+        ("DOCUMENT_DOWNLOAD", "DENIED") in actions
+        or ("DOCUMENT_VIEW", "DENIED") in actions
+        or ("DOCUMENT_DOWNLOAD", "SUCCESS") in actions
+        or ("DOCUMENT_VIEW", "SUCCESS") in actions
+    )
     assert any(
         e["action"] == "DOCUMENT_METADATA_UPDATE" and e["outcome"] == "DENIED"
         for e in audit_hook.events
