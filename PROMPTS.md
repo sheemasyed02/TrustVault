@@ -51,6 +51,8 @@ This is my working log. I used Cursor to help write code, but I gave the rules, 
 
 **How I checked:** auth + seed pytest suite.
 
+**Commit (history):** ce0c68d — Implemented authentication and seeded roles.
+
 ---
 
 ## Task 5 — Centralized document authorization
@@ -189,7 +191,7 @@ This is my working log. I used Cursor to help write code, but I gave the rules, 
 
 ---
 
-## Task 16 — Security matrix, threat model, authz-removal demo (2026-10-21)
+## Task 14 — Security matrix, threat model, authz-removal demo (2026-10-21)
 
 **What I asked for:** Inspect routes/authz/tests/docs; add a dedicated security regression matrix; close documentation gaps in THREATS/PERMISSIONS/README; demonstrate that removing download authorization fails a real IDOR test; do not invent controls.
 
@@ -220,7 +222,7 @@ This is my working log. I used Cursor to help write code, but I gave the rules, 
 
 ---
 
-## Task 14 — Durable audit hash chain + admin APIs (2026-10-21)
+## Task 16 — Durable audit hash chain + admin APIs (2026-10-21)
 
 **What I asked for:** Tamper-evident audit trail with ADMIN-only listing and integrity verification; record login/document/permission/admin actions; concurrency-safe appends; honest THREATS.md limits.
 
@@ -237,13 +239,15 @@ This is my working log. I used Cursor to help write code, but I gave the rules, 
 3. Restored PERMISSIONS.md after an over-broad rewrite and patched only audit/admin sections.
 
 **How I checked:**
-- `alembic upgrade head` — applied `b2c3d4e5f6a7`
-- `pytest tests/test_audit_trail.py` — **14 passed**
-- `pytest tests/test_auth.py tests/test_audit_trail.py tests/test_document_mutations.py tests/test_document_sharing.py` — **73 passed**
+- `alembic upgrade head` ? applied `b2c3d4e5f6a7`
+- `pytest tests/test_audit_trail.py` ? **14 passed**
+- `pytest tests/test_auth.py tests/test_audit_trail.py tests/test_document_mutations.py tests/test_document_sharing.py` ? **73 passed**
+
+**Commit (history):** `f9ae346` ? Add durable audit trail and ADMIN dashboard UI.
 
 ---
 
-## Bugfix — upload vanished + R2 env loading (2026-10-21)
+## Bugfix ? upload vanished + R2 env loading (2026-10-21)
 
 **Symptoms:** Owner upload looked successful then the document disappeared; R2 seemed broken depending on how the API was started.
 
@@ -257,7 +261,7 @@ This is my working log. I used Cursor to help write code, but I gave the rules, 
 
 ---
 
-## Task 18 — Permission audit vs hackathon role model (2026-10-21)
+## Task 17 — Permission audit vs hackathon role model (2026-10-21)
 
 **What I asked for:** Audit ADMIN/OWNER/VIEWER vs document READ/EDIT; fix mismatches; regression tests; update PERMISSIONS/API docs. No hosting/deploy changes.
 
@@ -269,7 +273,7 @@ This is my working log. I used Cursor to help write code, but I gave the rules, 
 
 ---
 
-## Task 19 — Role-aware UI workflows (2026-10-21)
+## Task 18 — Role-aware UI workflows (2026-10-21)
 
 **What I asked for:** Post-login role homes; OWNER/VIEWER/ADMIN workflows with real APIs; READ vs EDIT badges; revoke clears client content; admin integrity from API `valid`; tests + build. No template rewrite / deploy.
 
@@ -291,36 +295,7 @@ This is my working log. I used Cursor to help write code, but I gave the rules, 
 
 ---
 
-## Short summary for markers
-
-| Counted task | Topic | Example of me directing / correcting the tool |
-| --- | --- | --- |
-| 1 | Scaffold | Forced Next upgrade + ESLint fix after CVE / broken config |
-| 2 | Schema | Blocked unreachable Railway internal host for local migrate |
-| 3 | R2 service | No public/presigned URL helpers |
-| 4 | Auth | Generic login errors; role from DB not token |
-| 5 | Authz layer | Fixed seed test pollution from local demo users |
-| 6 | Upload | Added missing `python-multipart`; ignore client owner/key |
-| 7 | List/download | Fixed bad storage mocks + filename safety |
-| 8 | Sharing | Stopped blanket rollback; regrant = new row |
-| 9 | Edit/delete | Soft-delete-first; NullPool after connection exhaustion |
-| 10 | Frontend login | Memory-only token; Vitest cleanup; honest logout limits |
-| 11 | Document dashboard | Real list API only; Shared With Me without inventing an endpoint; fixed build/lint |
-| 12 | Document lifecycle UI | Multipart upload; UUID grant (no user search); confirm delete/revoke |
-| 13 | Owner/EDIT content edit | Server `your_access`; READ view-only; PUT content |
-| 14 | Durable audit + admin APIs | Hash chain; advisory lock; ADMIN list/verify |
-| 15 | Admin dashboard UI | Real summary/users/audit; last-admin lockout guard |
-| 16 | Security matrix + THREATS | IDOR demo fails when authz removed; docs honesty |
-| 18 | Permission audit | Confirmed server authz; clarified role vs grant |
-| 19 | Role-aware workflows | List `your_access` + `shared_only`; role homes/nav |
-| 20 | Acceptance + authz demo | ACCEPTANCE.md; journey tests; demo fail then restore |
-| 21 | Test DB isolation | Mock Admin users were pytest leaks; SAVEPOINT restart + purge CLI |
-
-I still review diffs, run tests myself, and refuse fake “all green” claims when a run actually failed.
-
----
-
-## Task 20 — Acceptance verification + authz-removal demo (2026-10-21)
+## Task 19 — Acceptance verification + authz-removal demo (2026-10-21)
 
 **What I asked for:** Acceptance checklist mapping brief → tests; E2E journey; search/upload/R2 checks; controlled authz-removal demo; full validation; readiness report; commit docs/fixes only. No deploy / DB provider change.
 
@@ -338,7 +313,7 @@ I still review diffs, run tests myself, and refuse fake “all green” claims w
 
 ---
 
-## Task 21 — Stop “mock users” in Admin Users + expand demo accounts (2026-10-21)
+## Task 20 — Stop “mock users” in Admin Users + expand demo accounts (2026-10-21)
 
 **What I asked for:** Fix Admin Users filling with fake accounts on login; add more OWNER/VIEWER demos alongside snovasys/sheema/user; verify against the full brief and fill any missing floor features.
 
@@ -356,3 +331,48 @@ I still review diffs, run tests myself, and refuse fake “all green” claims w
 - One remaining intentional leak path: `test_login_failure_creates_denied_audit_event` used a real committed session — fixed with post-test cleanup of that user + related audit rows.
 - Backend `pytest -q` → **252 passed**; post-suite purge dry-run → **No leaked test users found.**
 - Frontend `npm test -- --run` → **59 passed** (16 files) after updating admin users Vitest.
+
+---
+
+## Task 21 — Final security review + deployment hardening (2026-10-23)
+
+**What I asked for:** Final review of authz, secrets/CORS/R2, migrations, audit integrity, full regression, honest deploy smoke status; update THREATS/PERMISSIONS/API/README/PROMPTS. Fix real defects only. Do not invent live URL success.
+
+**What the AI generated / inspected:** Route-by-route authn/authz review; confirmed document ownership and grants come from PostgreSQL; confirmed ADMIN audit is metadata-only; confirmed no auto-seed/migrate on startup.
+
+**What was wrong or incomplete:**
+1. Interactive OpenAPI (`/docs`, `/redoc`, `/openapi.json`) remained enabled even for production `APP_ENV`.
+2. README briefly implied PDF uploads; uploads are **DOCX only**.
+3. `/health/ready` existed in code but was under-documented.
+
+**How it was corrected:** Disabled OpenAPI surfaces when `APP_ENV=production`; corrected DOCX-only wording; documented readiness + CORS/OpenAPI behavior in API/THREATS/README.
+
+**How I checked (local `trustvault_test`, not Neon production):**
+- Backend `pytest -q` → **334 passed**
+- Security-focused subset → **131 passed**
+- Frontend Vitest → **60 passed**; `npm run build` → success
+- Live Render/Vercel/Neon smoke → **not performed** in that session
+
+**Commit note:** An agent temporarily created git commit `713764a` for this work. Per maintainer request that commit (and a follow-on deliverables commit) was **reset** with `git reset --mixed 1ba9b43` so the human can commit. The OpenAPI/docs/test changes remain in the working tree until the human commits.
+
+---
+
+## Task 22 — Hackathon final deliverables pack (2026-10-23)
+
+**What I asked for:** Complete README (problem, features, architecture, setup, env names, R2, migrations, tests, demo accounts, limits); architecture/trade-offs; five-minute demo script; interview Q&A; PROMPTS accuracy; repo checks and regression runs. No invented URLs, screenshots, or fake test claims. Human owns the git commit (agent must not commit).
+
+**What the AI generated:** Rewrote `README.md`; added `DEMO.md` and `INTERVIEW_PREP.md`; kept deployed URL table blank/unverified because only `http://127.0.0.1:8000` is configured as `NEXT_PUBLIC_API_BASE_URL` in this workspace.
+
+**What was wrong or incomplete until corrected:**
+1. Placeholder hosts like `*.onrender.com` / `*.vercel.app` could be misread as live — clarified as placeholders; explicit “not verified” table.
+2. Agent had committed deliverables; maintainer asked to revert agent commits and leave changes uncommitted — `HEAD` is `1ba9b43` with deliverable/security files uncommitted.
+
+**How verified (this deliverables session, after reset):**
+- git reset --mixed 1ba9b43 — agent commits undone; HEAD = 1ba9b43
+- Backend pytest -q → **334 passed** (~58s, local 	rustvault_test)
+- Frontend 
+pm test -- --run → **60 passed**
+- Frontend 
+pm run build → success
+- Deployed public URLs: **not tested** (NEXT_PUBLIC_API_BASE_URL=http://127.0.0.1:8000 only)
+- No agent commit created for this pack (human will commit)

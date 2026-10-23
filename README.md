@@ -1,42 +1,125 @@
 # TrustVault
 
-Secure document-sharing web application for confidential company documents. Server-side document access control and an auditable activity trail are required before features are considered complete.
+Secure document-sharing for confidential company files. Access decisions are enforced **on the server** against PostgreSQL; private file bytes stay in Cloudflare R2 and are streamed only after authorization. An append-only audit hash chain records security-relevant successes and denials for administrator review.
 
-## Stack
+This is not a static dashboard or client-only ACL demo. Hiding a button in the UI is not authorization.
+
+## Problem
+
+Teams need to share sensitive documents without:
+
+- Guessable public download links that outlive permission changes
+- Trusting the browser for role or owner claims
+- Losing visibility into who attempted access (including denials)
+
+TrustVault addresses that with JWT authentication, document-level grants, private object storage, and a durable audit trail.
+
+## Features (implemented)
+
+- Login / logout with Argon2id password hashes and short-lived JWT access tokens (frontend keeps the token **in memory only**)
+- Platform roles: `ADMIN`, `OWNER`, `VIEWER` (navigation hints only — API re-loads role/`is_active` from PostgreSQL)
+- Document-level access: ownership (`documents.owner_id`) plus `READ` / `EDIT` grants
+- OWNER upload (**DOCX only**, size/type/content checks), list/search/filter, metadata edit, soft-delete
+- In-app DOCX preview; content edit for owner or active EDIT grantee
+- Authorized download streamed through FastAPI (no public/presigned R2 URLs)
+- Grant / revoke with **immediate** effect on the next protected request
+- ADMIN user activate/deactivate, audit event list/filters, hash-chain integrity verify
+- Owner promotion requests (VIEWER → OWNER) with admin review
+- Health: `GET /health` (liveness), `GET /health/ready` (DB readiness)
+
+Details: [`PERMISSIONS.md`](PERMISSIONS.md), [`API_DOCUMENTATION.md`](API_DOCUMENTATION.md), [`THREATS.md`](THREATS.md).
+
+## Architecture overview
+
+```
+Browser (Next.js / Vercel)
+   │  Authorization: Bearer <access_token>
+   │  NEXT_PUBLIC_API_BASE_URL → API origin only
+   ▼
+FastAPI (Render) ── validates JWT + loads active user from PostgreSQL
+   │
+   ├─ document_authorization  ← ownership + active grants (revoked_at IS NULL)
+   ├─ private Cloudflare R2   ← opaque storage_key from DB only
+   └─ audit_events hash chain ← SUCCESS / DENIED metadata (not file bytes)
+              │
+              ▼
+         Neon PostgreSQL
+```
+
+### Request flow (actual)
+
+1. User signs in via `POST /auth/login` → JWT (`sub` = user id). Role is **not** authorization proof.
+2. Protected routes call `get_current_user`: verify signature/exp/iss/aud, load user from DB, reject inactive accounts.
+3. Document routes call `document_authorization` against **current** ownership/grants (not client fields, not cached JWT permissions).
+4. Allowed uploads/downloads/edits use the private R2 service with server-generated keys.
+5. Relevant successes and denials append to `audit_events` (hash chain + advisory lock).
+6. `GET /admin/audit/integrity` re-hashes the chain and reports `valid` / reason codes. A DBA who can rewrite the whole table can still forge a consistent chain — see limitations below.
+
+### Why these choices
+
+| Choice | Reason |
+| --- | --- |
+| PostgreSQL (Neon) | Relational integrity for users, grants, soft-delete, and concurrent audit locking |
+| FastAPI | Explicit deps for authn/authz; streaming downloads; clear HTTP status mapping |
+| Next.js | App Router UI with role-aware navigation that still calls the real API |
+| Private R2 | Bytes never exposed as long-lived public URLs; revoke works on the next API check |
+| Server-side authorization | Prevents IDOR and UI bypass; every protected action re-checks DB state |
+
+### Trade-offs and residual limits
+
+- **Free-tier / cold starts:** Render free web services may sleep; first request after idle can be slow or time out. Neon free projects may pause and need wake-up before `/health/ready` succeeds.
+- **Audit chain:** Detects many single-row / link tampers; **does not** defeat an attacker who rewrites the database and recalculates the entire chain (no external anchor).
+- **No app-level login rate limit** — rely on host/WAF if needed.
+- **No server-side JWT revocation list** — logout clears browser memory; token valid until expiry if the account stays active.
+- **R2/DB partial failures:** Upload compensates with R2 delete if DB insert fails; delete soft-deletes first then removes R2 (503 + tombstone if R2 fails). Orphan private objects may remain until ops cleanup.
+- **Monitoring / backups:** Not productized in-app; use Neon/Render/R2 provider tooling.
+
+## Technology stack
 
 | Layer | Technology |
 | --- | --- |
-| Frontend | Next.js (App Router), TypeScript, Tailwind CSS — **Vercel** |
-| Backend | FastAPI, Python 3.12 — **Render** |
-| Database | PostgreSQL — **Neon** (SQLAlchemy + Alembic) |
-| Auth | Argon2id passwords (`pwdlib`), JWT access tokens (`PyJWT`) |
-| File storage | Private Cloudflare **R2** (S3-compatible API; no public object URLs) |
-| Backend tests | pytest |
+| Frontend | Next.js (App Router), TypeScript, Tailwind CSS — intended host **Vercel** |
+| Backend | FastAPI, Python 3.12, uvicorn — intended host **Render** |
+| Database | PostgreSQL via SQLAlchemy 2 + Alembic — intended host **Neon** |
+| Auth | Argon2id (`pwdlib`), JWT HS256 (`PyJWT`) |
+| Files | Private Cloudflare R2 (S3-compatible, boto3) |
+| Tests | pytest (backend), Vitest (frontend) |
 
-Project rules: see [`AGENTS.md`](AGENTS.md).
-
-## Current capabilities
-
-- Login / logout (memory-only access token on the frontend; `Authorization: Bearer`)
-- Role-aware navigation (ADMIN / OWNER / VIEWER) — **UI only**; API enforces authz
-- Document upload (DOCX/PDF), list, details, search/filter, metadata edit, soft-delete
-- Private R2 storage with opaque keys; downloads stream through the API after authz
-- Per-document READ / EDIT grants with immediate revocation
-- In-app DOCX preview/edit for owner and EDIT grantees
-- Admin dashboard: user activate/deactivate, audit list/filters, hash-chain verify
-- Durable audit hash chain (not DBA-proof; see [`THREATS.md`](THREATS.md))
+Rules: [`AGENTS.md`](AGENTS.md).
 
 ## Repository layout
 
 ```
 TrustVault/
-  frontend/     Next.js app (Vercel)
-  backend/      FastAPI app (Render)
-  render.yaml   Render Blueprint (API only; secrets via dashboard)
-  AGENTS.md     Product and agent rules
+  frontend/              Next.js app
+  backend/               FastAPI app + Alembic + pytest
+  render.yaml            Render Blueprint (no secrets)
+  AGENTS.md              Product / agent rules
+  THREATS.md             Threat model
+  PERMISSIONS.md         Authz matrix
+  API_DOCUMENTATION.md   HTTP routes
+  PROMPTS.md             AI assistance log
+  DEMO.md                Five-minute demo script
+  INTERVIEW_PREP.md      Interview Q&A
+  ACCEPTANCE.md          Acceptance evidence matrix
 ```
 
-## Quick start (local)
+## Deployed URLs
+
+**Not verified in this workspace.** Local frontend env points at `http://127.0.0.1:8000` only. Do not treat placeholder hosts (for example `*.onrender.com` / `*.vercel.app` in setup docs) as live until you open them and confirm `/health` and the UI.
+
+When you deploy, record the real URLs here after testing:
+
+| Surface | URL | Verified |
+| --- | --- | --- |
+| Frontend (Vercel) | _add after deploy_ | No |
+| Backend (Render) | _add after deploy_ | No |
+
+Local API docs (when `APP_ENV` is not `production`): `http://127.0.0.1:8000/docs`  
+Route reference in-repo: [`API_DOCUMENTATION.md`](API_DOCUMENTATION.md)  
+In production (`APP_ENV=production`), `/docs`, `/redoc`, and `/openapi.json` are disabled.
+
+## Local setup
 
 ### Backend
 
@@ -46,36 +129,95 @@ py -3.12 -m venv .venv
 .\.venv\Scripts\Activate.ps1
 pip install -r requirements.txt
 copy .env.example .env
-# Set DATABASE_URL and JWT_SECRET_KEY in backend/.env (never commit secrets)
+# Set DATABASE_URL, JWT_SECRET_KEY, R2_*, CORS_ORIGINS (placeholders only in git)
 alembic upgrade head
 uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
 ```
 
-Health checks:
-
 - Liveness: `GET http://127.0.0.1:8000/health`
-- Readiness (DB): `GET http://127.0.0.1:8000/health/ready`
+- Readiness: `GET http://127.0.0.1:8000/health/ready`
 
 ### Frontend
 
 ```powershell
 cd D:\TrustVault\frontend
 copy .env.example .env.local
-# Set NEXT_PUBLIC_API_BASE_URL=http://127.0.0.1:8000
+# NEXT_PUBLIC_API_BASE_URL=http://127.0.0.1:8000
 npm install
 npm run dev
 ```
 
-### Demo accounts (development only)
+Open `http://localhost:3000`.
+
+### PostgreSQL / Neon and safe migrations
+
+**Local**
+
+```powershell
+# Example: create app + test databases
+psql -h 127.0.0.1 -p 5432 -U postgres -c "CREATE DATABASE trustvault_db;"
+psql -h 127.0.0.1 -p 5432 -U postgres -c "CREATE DATABASE trustvault_test;"
+```
+
+Set `DATABASE_URL` / `TEST_DATABASE_URL` in `backend/.env` (never commit real passwords).
+
+**Neon (production-intended)**
+
+1. Pooled connection string → application `DATABASE_URL` (keep `sslmode=require` query params).
+2. Direct (non-pooler) string → optional `DIRECT_URL` for Alembic DDL.
+3. From a network that can reach Neon:
 
 ```powershell
 cd D:\TrustVault\backend
 .\.venv\Scripts\Activate.ps1
-# DEMO_ADMIN_PASSWORD, DEMO_OWNER_PASSWORD, DEMO_VIEWER_PASSWORD in backend/.env
+$env:DIRECT_URL = "<neon-direct-url-placeholder>"
+alembic current
+```
+
+Repo head revision: **`c3d4e5f6a7b8`**.
+
+**Safety**
+
+- Never drop, recreate, or truncate production data for “convenience.”
+- Do not auto-run migrations or seed on every web-service start.
+- If schema was restored from pgAdmin and already matches head, prefer `alembic stamp head` only after verifying tables — not a blind `upgrade` that you do not understand.
+- If behind head with additive migrations only: `alembic upgrade head` then `alembic current`.
+
+Read-only verification:
+
+```sql
+SELECT version_num FROM alembic_version;
+SELECT tablename FROM pg_tables WHERE schemaname = 'public' ORDER BY 1;
+```
+
+### Required environment variables (names + placeholders)
+
+See `backend/.env.example` and `frontend/.env.example`.
+
+**Backend:** `DATABASE_URL`, optional `DIRECT_URL`, `JWT_SECRET_KEY`, `JWT_ALGORITHM`, `JWT_ISSUER`, `JWT_AUDIENCE`, `ACCESS_TOKEN_EXPIRE_MINUTES`, `CORS_ORIGINS`, `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET_NAME`, `R2_ENDPOINT_URL`, `APP_ENV`, optional `DEMO_*_PASSWORD`, `TEST_DATABASE_URL` (pytest only).
+
+**Frontend:** `NEXT_PUBLIC_API_BASE_URL` only.
+
+Never put DB passwords, JWT secrets, or R2 secrets in frontend env, README values, or git.
+
+### Private Cloudflare R2
+
+1. Create a bucket; leave it **private** (no public access).
+2. Create an API token with object read/write on that bucket.
+3. Set the five `R2_*` variables on the backend host.
+4. Endpoint form: `https://<ACCOUNT_ID>.r2.cloudflarestorage.com`
+5. Confirm downloads never return a public object URL — only streamed API responses after authz.
+
+### Demo accounts (development seed only)
+
+```powershell
+cd D:\TrustVault\backend
+.\.venv\Scripts\Activate.ps1
+# Set DEMO_ADMIN_PASSWORD, DEMO_OWNER_PASSWORD, DEMO_VIEWER_PASSWORD in backend/.env
 python -m app.cli.seed_demo_users
 ```
 
-| Email | Role | Password env |
+| Email | Role | Password comes from |
 | --- | --- | --- |
 | `snovasys@trustvault.demo` | ADMIN | `DEMO_ADMIN_PASSWORD` |
 | `sheema@trustvault.demo` | OWNER | `DEMO_OWNER_PASSWORD` |
@@ -85,183 +227,17 @@ python -m app.cli.seed_demo_users
 | `alex@trustvault.demo` | VIEWER | `DEMO_VIEWER_PASSWORD` |
 | `jordan@trustvault.demo` | VIEWER | `DEMO_VIEWER_PASSWORD` |
 
-Login never creates users. The API only authenticates existing rows. **Do not auto-seed on Render startup.** The seed CLI is idempotent for existing demo emails but will abort on role conflicts — check before running against a restored production database.
-
----
-
-## Deployment architecture
-
-```
-Browser  →  Vercel (Next.js)
-              │  NEXT_PUBLIC_API_BASE_URL
-              ▼
-            Render (FastAPI / uvicorn 0.0.0.0:$PORT)
-              ├── Neon PostgreSQL (DATABASE_URL; optional DIRECT_URL for Alembic)
-              └── Cloudflare R2 (private bucket; server-side only)
-```
-
-### Environment variables
-
-#### Backend (Render)
-
-| Name | Required | Purpose |
-| --- | --- | --- |
-| `DATABASE_URL` | Yes | App traffic (Neon pooled URL is fine) |
-| `DIRECT_URL` | No | Neon **direct** (non-pooler) URL for Alembic only |
-| `JWT_SECRET_KEY` | Yes | HS256 signing secret (≥ 32 random chars) |
-| `JWT_ALGORITHM` | No | Must be `HS256` (default) |
-| `JWT_ISSUER` / `JWT_AUDIENCE` | No | Token claims (defaults: `trustvault` / `trustvault-api`) |
-| `ACCESS_TOKEN_EXPIRE_MINUTES` | No | Default `30` |
-| `CORS_ORIGINS` | Yes (prod) | Exact Vercel origin(s), comma-separated; **no `*`** |
-| `R2_ACCOUNT_ID` | Yes | Cloudflare account id |
-| `R2_ACCESS_KEY_ID` | Yes | R2 API token access key |
-| `R2_SECRET_ACCESS_KEY` | Yes | R2 API token secret |
-| `R2_BUCKET_NAME` | Yes | Private bucket name |
-| `R2_ENDPOINT_URL` | Yes | `https://<ACCOUNT_ID>.r2.cloudflarestorage.com` |
-| `APP_ENV` | No | e.g. `production` |
-| `DEMO_*_PASSWORD` | No | Dev seed only — omit on production |
-
-Never put database, JWT, or R2 secrets in the frontend or in git.
-
-#### Frontend (Vercel)
-
-| Name | Required | Purpose |
-| --- | --- | --- |
-| `NEXT_PUBLIC_API_BASE_URL` | Yes | Absolute API URL, e.g. `https://trustvault-api.onrender.com` |
-
-### Render (backend)
-
-Blueprint: [`render.yaml`](render.yaml) (no secrets embedded).
-
-| Step | Command / setting |
-| --- | --- |
-| Root directory | `backend` |
-| Runtime | Python `3.12.8` (`PYTHON_VERSION` / `runtime.txt`) |
-| Build | `pip install -r requirements.txt` |
-| Start | `uvicorn app.main:app --host 0.0.0.0 --port $PORT` |
-| Health check path | `/health` |
-
-Manual create (if not using Blueprint):
-
-1. New **Web Service** → connect this repo → Root Directory `backend`.
-2. Build / start commands as above.
-3. Set every required env var in the Render dashboard.
-4. Deploy, then open `https://<service>/health` and `/health/ready`.
-
-**Do not** configure a start/release command that runs `alembic upgrade head` on every boot, seeds demo users, or drops/recreates the database.
-
-### Vercel (frontend)
-
-1. Import the repo; set **Root Directory** to `frontend`.
-2. Framework preset: Next.js (default `npm run build` / `next start`).
-3. Set `NEXT_PUBLIC_API_BASE_URL` to the Render HTTPS origin (Production + Preview as needed).
-4. Deploy. Add the resulting `https://<project>.vercel.app` (and custom domain) to backend `CORS_ORIGINS`.
-
-### Neon (PostgreSQL)
-
-This environment could not resolve the Neon hostname at audit time. Before migrating production:
-
-1. In Neon, copy the **pooled** connection string → Render `DATABASE_URL`.
-2. Copy the **direct** connection string → Render/local `DIRECT_URL` (recommended for Alembic).
-3. From a machine that can reach Neon:
-
-```powershell
-cd D:\TrustVault\backend
-.\.venv\Scripts\Activate.ps1
-# Temporarily point env at Neon DIRECT_URL (do not commit)
-$env:DATABASE_URL = "<neon-direct-or-leave-as-app-url>"
-$env:DIRECT_URL = "<neon-direct-url>"
-alembic current
-```
-
-Expected head revision in this repo: **`c3d4e5f6a7b8`**.
-
-#### Migration safety
-
-- **Never** drop, recreate, or truncate the production database.
-- **Never** run `python -m app.cli.seed_demo_users` against production without checking for existing users (the command is idempotent for known demo emails but aborts on role conflicts and is still a write).
-- If `alembic current` already shows `c3d4e5f6a7b8` and tables exist (e.g. restored from pgAdmin), **do not** re-run a full schema create — you are done.
-- If `alembic_version` is missing but tables were restored manually, stamp after verifying schema matches models:
-
-```powershell
-# Only after confirming tables/columns match the migration history
-alembic stamp head
-```
-
-- If `alembic current` is behind `head` and you need additive migrations only:
-
-```powershell
-# Prefer DIRECT_URL for DDL on Neon
-$env:DIRECT_URL = "<neon-direct-url>"
-alembic upgrade head
-alembic current
-```
-
-Verification query (read-only):
-
-```sql
-SELECT version_num FROM alembic_version;
-SELECT tablename FROM pg_tables WHERE schemaname = 'public' ORDER BY 1;
-```
-
-Application traffic continues to use `DATABASE_URL`. Alembic uses `DIRECT_URL` when set, otherwise `DATABASE_URL`.
-
-### Cloudflare R2
-
-- Keep the bucket **private** (no public access).
-- Configure the five `R2_*` variables on Render only.
-- Uploads/downloads go through authorized FastAPI routes; the browser never receives R2 secrets or long-lived public object URLs.
-
----
-
-## Post-deploy smoke checks
-
-Replace hosts with your real Vercel and Render URLs. Do not paste tokens into shared logs.
-
-```powershell
-# 1) Liveness / readiness
-curl.exe -s https://<api-host>/health
-curl.exe -s https://<api-host>/health/ready
-
-# 2) Login + current user
-curl.exe -s -X POST https://<api-host>/auth/login -H "Content-Type: application/json" -d "{\"email\":\"<user>\",\"password\":\"<password>\"}"
-# Use access_token from the response:
-curl.exe -s https://<api-host>/users/me -H "Authorization: Bearer <token>"
-
-# 3) Authorized document list
-curl.exe -s "https://<api-host>/documents?page=1&page_size=10" -H "Authorization: Bearer <token>"
-```
-
-Then in the browser (Vercel origin):
-
-1. Login / logout
-2. Upload a small DOCX/PDF; confirm list + detail
-3. Download (bytes via API, not a public R2 URL)
-4. Grant READ to another user; confirm they can open; revoke; confirm 404/deny
-5. As ADMIN: audit list + integrity verify
-
-Health JSON must never include connection strings, passwords, or document contents.
-
----
+Passwords are **not** printed by the seed command and must not be pasted into this README. Login never creates users. Do not auto-seed on Render startup.
 
 ## Tests
 
-### Backend (targeted / CI-friendly)
+Requires isolated `TEST_DATABASE_URL` (name must contain `test`; never production `neondb`).
 
 ```powershell
 cd D:\TrustVault\backend
 .\.venv\Scripts\Activate.ps1
-# Requires TEST_DATABASE_URL → local trustvault_test (see backend/.env.example)
-pytest -q tests/test_health.py tests/test_database_url.py tests/test_test_database_config.py
-```
-
-### Backend (full suite — only when explicitly requested)
-
-```powershell
 pytest -q
 ```
-
-### Frontend
 
 ```powershell
 cd D:\TrustVault\frontend
@@ -269,26 +245,70 @@ npm test -- --run
 npm run build
 ```
 
----
+Security matrix: `pytest -q tests/security/`
+
+Authz-removal demonstration procedure (local, disposable edit — **do not commit**): see [`THREATS.md`](THREATS.md) and [`DEMO.md`](DEMO.md). It has been performed in earlier tasks; vulnerable code was restored and never left committed.
+
+## Security decisions (summary)
+
+- Every protected document/admin route authenticates then authorizes server-side.
+- Ownership and grants come from PostgreSQL; client `owner_id` / `storage_key` / role claims are ignored or rejected.
+- READ cannot edit metadata; EDIT cannot grant or delete; ADMIN cannot download content without an explicit grant.
+- Soft-deleted documents are unservable (404).
+- Audit APIs are ADMIN-only and return metadata, not file bytes.
+- CORS is an explicit origin list (no `*` with credentials).
+
+Full model: [`THREATS.md`](THREATS.md), [`PERMISSIONS.md`](PERMISSIONS.md).
+
+## Known limitations / unfinished work
+
+- Live production URL verification depends on your deployed hosts (blank table above until tested)
+- Application-layer rate limiting / lockout not implemented
+- No refresh-token rotation or server logout revocation store
+- No automated orphan-R2 sweeper
+- Audit chain not externally anchored
+- DOCX→PDF download conversion quality depends on LibreOffice availability (fallback is limited)
+- Mammoth HTML preview is not a full XSS sanitizer product
+
+## Five-minute demo and interview prep
+
+- Live demo script: [`DEMO.md`](DEMO.md)
+- Interview Q&A: [`INTERVIEW_PREP.md`](INTERVIEW_PREP.md)
+
+## Deployment (Render / Vercel / Neon / R2)
+
+Blueprint: [`render.yaml`](render.yaml).
+
+| Backend | Value |
+| --- | --- |
+| Root | `backend` |
+| Build | `pip install -r requirements.txt` |
+| Start | `uvicorn app.main:app --host 0.0.0.0 --port $PORT` |
+| Health | `/health` |
+
+Frontend root: `frontend`. Set `NEXT_PUBLIC_API_BASE_URL` to the Render HTTPS origin; add that Vercel origin to `CORS_ORIGINS`.
+
+Do not run destructive DB commands or auto-seed on service boot.
 
 ## Troubleshooting
 
 | Symptom | Likely cause |
 | --- | --- |
-| Browser CORS error | Vercel origin missing from `CORS_ORIGINS` (exact scheme/host; no trailing slash mismatch) |
-| `/health` OK but `/health/ready` 503 | `DATABASE_URL` wrong, Neon paused, or SSL params missing |
-| Login 500 “Authentication is not configured” | `JWT_SECRET_KEY` missing/short |
-| Upload/download 503 storage errors | Missing/invalid `R2_*` env vars or bucket permissions |
-| Frontend “Unable to reach the TrustVault API” | Wrong `NEXT_PUBLIC_API_BASE_URL` or Render service asleep/failed |
-| Alembic hangs / pooler DDL errors | Set `DIRECT_URL` to Neon’s non-pooler host for migrations |
+| Browser CORS error | Vercel origin missing from `CORS_ORIGINS` |
+| `/health` OK, `/health/ready` 503 | Bad `DATABASE_URL`, Neon paused, or SSL params missing |
+| Login misconfigured | `JWT_SECRET_KEY` missing/short |
+| Upload/download storage errors | Missing/invalid `R2_*` or private bucket policy |
+| Frontend cannot reach API | Wrong `NEXT_PUBLIC_API_BASE_URL` or cold/stopped API |
+| Alembic issues on Neon pooler | Use `DIRECT_URL` (non-pooler) for migrations |
 
-## Documentation
+## Documentation index
 
-- [`AGENTS.md`](AGENTS.md) — product and agent rules
-- [`ACCEPTANCE.md`](ACCEPTANCE.md) — requirement → test → manual verification matrix
-- [`PERMISSIONS.md`](PERMISSIONS.md) — role / resource / action matrix
-- [`API_DOCUMENTATION.md`](API_DOCUMENTATION.md) — real HTTP routes
-- [`THREATS.md`](THREATS.md) — threat model and residual risks
-- [`PROMPTS.md`](PROMPTS.md) — dated AI assistance log
-- [`backend/README.md`](backend/README.md) — backend-focused notes
-- [`frontend/README.md`](frontend/README.md) — frontend-focused notes
+- [`AGENTS.md`](AGENTS.md) — product and agent rules  
+- [`ACCEPTANCE.md`](ACCEPTANCE.md) — requirement → test matrix  
+- [`PERMISSIONS.md`](PERMISSIONS.md) — role / grant matrix  
+- [`API_DOCUMENTATION.md`](API_DOCUMENTATION.md) — HTTP routes  
+- [`THREATS.md`](THREATS.md) — threats and residuals  
+- [`PROMPTS.md`](PROMPTS.md) — AI assistance log  
+- [`DEMO.md`](DEMO.md) — five-minute demo  
+- [`INTERVIEW_PREP.md`](INTERVIEW_PREP.md) — interview answers  
+- [`backend/README.md`](backend/README.md) · [`frontend/README.md`](frontend/README.md)

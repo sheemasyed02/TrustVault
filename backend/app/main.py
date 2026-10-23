@@ -59,15 +59,24 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
 
 def create_app() -> FastAPI:
     settings = get_settings()
+    # Hide interactive OpenAPI surfaces in production (attack-surface reduction).
+    # Schema remains available locally/dev for engineers.
+    expose_api_docs = settings.app_env.strip().lower() not in {
+        "production",
+        "prod",
+    }
     app = FastAPI(
         title=settings.app_name,
         description=(
             "Secure document sharing API. "
-            "Register/login, upload PDF/DOCX, list, metadata, content edit, PDF download, "
+            "Register/login, upload DOCX, list, metadata, content edit, authorized download, "
             "grant/revoke, owner soft-delete, owner promotion, and administrator audit/user management."
         ),
         version="0.1.0",
         lifespan=lifespan,
+        docs_url="/docs" if expose_api_docs else None,
+        redoc_url="/redoc" if expose_api_docs else None,
+        openapi_url="/openapi.json" if expose_api_docs else None,
     )
 
     app.add_middleware(

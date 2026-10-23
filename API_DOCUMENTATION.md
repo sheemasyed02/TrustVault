@@ -2,11 +2,13 @@
 
 Base URL (local): `http://127.0.0.1:8000`
 
+Production API is intended to run on **Render** (see root `README.md`). Set `CORS_ORIGINS` to the exact Vercel frontend origin(s). Interactive OpenAPI (`/docs`, `/redoc`, `/openapi.json`) is disabled when `APP_ENV=production`.
+
 ## Implemented
 
 ### `GET /health`
 
-Returns service liveness for local development and deployment checks.
+Returns process liveness for platform health checks. Does **not** prove database connectivity. Never includes credentials or connection strings.
 
 **Response `200`**
 
@@ -14,6 +16,30 @@ Returns service liveness for local development and deployment checks.
 {
   "status": "ok",
   "service": "TrustVault"
+}
+```
+
+### `GET /health/ready`
+
+Readiness probe: runs a trivial database `SELECT 1` against `DATABASE_URL`. Returns HTTP `200` when the check succeeds and `503` when it fails. Response body reports boolean checks only — never URLs, passwords, stack traces, or row data.
+
+**Response `200`**
+
+```json
+{
+  "status": "ok",
+  "service": "TrustVault",
+  "checks": { "database": true }
+}
+```
+
+**Response `503`**
+
+```json
+{
+  "status": "unavailable",
+  "service": "TrustVault",
+  "checks": { "database": false }
 }
 ```
 

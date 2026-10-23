@@ -181,6 +181,10 @@ The same-database hash chain detects many in-place row edits when an attacker ca
 
 Downloads never rename `.docx` to `.pdf`. Conversion uses private temp directories that are deleted after use. Preview and download always re-check current grants. Previously downloaded PDF copies cannot be remotely revoked.
 
+## Deployment note (authorization unchanged)
+
+Authorization rules above are enforced only by the FastAPI backend against PostgreSQL. The Vercel frontend is a client: hiding buttons is not authorization. Production `CORS_ORIGINS` on Render must include the deployed Vercel origin exactly. JWT signing secrets and R2 credentials stay on the backend host only (`NEXT_PUBLIC_API_BASE_URL` is the only intentional public frontend config).
+
 ## Remaining gaps
 
 - Automated orphan R2 cleanup worker after failed storage delete
@@ -188,3 +192,4 @@ Downloads never rename `.docx` to `.pdf`. Conversion uses private temp directori
 - External chain-head anchoring (silent tail truncation / full DBA rewrite)
 - Full-fidelity DOCX→PDF without LibreOffice (fallback omits images and complex layout)
 - Full-fidelity in-browser Word editing (body tables/images/drawings are simplified on save)
+- Application-layer login rate limiting / account lockout (accepted ops residual)
