@@ -1,5 +1,11 @@
 """TrustVault FastAPI application entrypoint."""
 
+from __future__ import annotations
+
+import logging
+from contextlib import asynccontextmanager
+from collections.abc import AsyncIterator
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -13,6 +19,43 @@ from app.api.users import router as users_router
 from app.core.config import get_settings
 from app.core.errors import register_exception_handlers
 
+logger = logging.getLogger(__name__)
+
+
+def _configure_logging() -> None:
+    """Ensure startup/request errors are visible on the hosting platform."""
+    root = logging.getLogger()
+    if not root.handlers:
+        logging.basicConfig(
+            level=logging.INFO,
+            format="%(asctime)s %(levelname)s [%(name)s] %(message)s",
+        )
+
+
+@asynccontextmanager
+async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
+    """Validate non-secret configuration on boot.
+
+    Does not seed users, run Alembic, create/drop schema, or print credentials.
+    """
+    _configure_logging()
+    settings = get_settings()
+    try:
+        _ = settings.resolved_jwt_secret
+    except ValueError as exc:
+        logger.error("Startup configuration error: %s", exc)
+        raise
+    if "*" in settings.cors_origin_list:
+        logger.error("CORS_ORIGINS must not use '*' when credentials are enabled")
+        raise RuntimeError("Invalid CORS_ORIGINS: wildcard is not allowed")
+    logger.info(
+        "TrustVault API starting (env=%s, cors_origins=%d)",
+        settings.app_env,
+        len(settings.cors_origin_list),
+    )
+    yield
+    logger.info("TrustVault API shutting down")
+
 
 def create_app() -> FastAPI:
     settings = get_settings()
@@ -24,6 +67,7 @@ def create_app() -> FastAPI:
             "grant/revoke, owner soft-delete, owner promotion, and administrator audit/user management."
         ),
         version="0.1.0",
+        lifespan=lifespan,
     )
 
     app.add_middleware(

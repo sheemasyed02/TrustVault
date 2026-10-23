@@ -1,14 +1,18 @@
 # TrustVault backend
 
-FastAPI + Python. Current surface:
+FastAPI + Python 3.12. Deployed on **Render**; database on **Neon**; private files on **Cloudflare R2**.
 
-- `GET /health`
-- SQLAlchemy models and Alembic migrations for PostgreSQL schema
-- Private Cloudflare R2 storage service (`app.storage`)
-- Authentication: `POST /auth/login`, `GET /users/me`
-- Development seed: `python -m app.cli.seed_demo_users`
+## Surface (high level)
 
-Document upload/download endpoints and grant APIs are not implemented yet.
+- `GET /health` — liveness (no DB)
+- `GET /health/ready` — readiness (`SELECT 1`; no secrets in body)
+- Auth: `POST /auth/login`, `GET /users/me`, register/profile/password routes
+- Documents: upload, list, detail, metadata, content, download (R2 stream), soft-delete
+- Permissions: grant / revoke / list
+- Admin: users, promotions, audit list, integrity verify
+- Dev-only seed: `python -m app.cli.seed_demo_users` (never on startup)
+
+Full route list: [`../API_DOCUMENTATION.md`](../API_DOCUMENTATION.md).
 
 ## Setup
 
@@ -20,71 +24,75 @@ pip install -r requirements.txt
 copy .env.example .env
 ```
 
-Required in `backend/.env`:
+Required in `backend/.env` (or Render env):
 
 - `DATABASE_URL`
-- `JWT_SECRET_KEY` (long random secret, ≥ 32 characters)
+- `JWT_SECRET_KEY` (≥ 32 random characters)
+- R2 variables for upload/download (`R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET_NAME`, `R2_ENDPOINT_URL`)
+- `CORS_ORIGINS` including every browser origin (local + Vercel)
 
-Optional JWT settings: `JWT_ALGORITHM=HS256`, `JWT_ISSUER`, `JWT_AUDIENCE`, `ACCESS_TOKEN_EXPIRE_MINUTES`.
+Optional: `DIRECT_URL` (Neon direct host for Alembic), JWT issuer/audience/expiry.
 
-## Run API
+## Run API (local)
 
 ```powershell
 uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
 ```
 
+## Run API (Render)
+
+Documented in the root [`../README.md`](../README.md) and [`../render.yaml`](../render.yaml):
+
+```text
+pip install -r requirements.txt
+uvicorn app.main:app --host 0.0.0.0 --port $PORT
+```
+
+Startup validates JWT configuration and rejects CORS wildcards. It does **not** seed users, run migrations, or reset schema.
+
 ## Apply migrations
 
+Alembic uses `DIRECT_URL` when set, otherwise `DATABASE_URL`. Prefer Neon’s **direct** string for DDL.
+
 ```powershell
+alembic current
 alembic upgrade head
 ```
 
-Authentication reuses the existing `users` table. No additional auth migration was required.
+Current head: `c3d4e5f6a7b8`.
+
+If production was restored from pgAdmin and already matches this schema, inspect `alembic_version` before upgrading. Use `alembic stamp head` only when the schema already matches and the version table is missing/wrong — never drop/recreate the database.
+
+Verify connectivity (redacts passwords):
+
+```powershell
+.\.venv\Scripts\python.exe scripts\check_database_connection.py
+```
 
 ## Seed demo users (dev only)
 
 ```powershell
-# DEMO_ADMIN_PASSWORD, DEMO_OWNER_PASSWORD, DEMO_VIEWER_PASSWORD must be set
 python -m app.cli.seed_demo_users
 ```
 
-Never auto-seeded on startup. Passwords are never printed. Existing demo accounts are left unchanged on re-run; conflicting roles abort the seed.
+Never auto-seeded on startup. Passwords are never printed. Existing demo accounts are left unchanged on re-run; conflicting roles abort the seed. Do not run against a populated production DB without checking for duplicates/conflicts.
 
 ## Tests
 
-Pytest requires a dedicated `TEST_DATABASE_URL` (see `backend/.env.example`).
-It will not silently use `DATABASE_URL` / Neon production data.
+Pytest requires `TEST_DATABASE_URL` (local DB whose name contains `test`). It never falls back to `DATABASE_URL`.
 
 ```powershell
-# One-time: create isolated local DB, migrate it, then run tests
 psql -h 127.0.0.1 -p 5432 -U postgres -c "CREATE DATABASE trustvault_test;"
-# Set TEST_DATABASE_URL in backend/.env to the local trustvault_test URL
-$env:DATABASE_URL = $env:TEST_DATABASE_URL   # or paste the same URL for this shell
+# Set TEST_DATABASE_URL in backend/.env
+$env:DATABASE_URL = $env:TEST_DATABASE_URL
 alembic upgrade head
-python -m pytest -q
+pytest -q
 ```
 
-```powershell
-pytest -v
-pytest -v tests/test_auth.py tests/test_seed_demo_users.py
-```
+## Auth transport note
 
-## Token logout note
+Clients send `Authorization: Bearer <access_token>`. Tokens are not revoked server-side on logout; they remain valid until expiry. The Next.js app keeps the token in memory only.
 
-Stateless JWT access tokens are not revoked by a logout call in this codebase. Tokens remain valid until expiry unless a revocation mechanism is added later.
+## CORS
 
-## Database URL (Neon / Railway / local)
-
-The API and Alembic both read `DATABASE_URL` from `backend/.env` (gitignored) via
-`app.core.config.Settings`. Driver: sync `psycopg` (`postgresql+psycopg://`).
-
-```powershell
-cd D:\TrustVault\backend
-.\.venv\Scripts\python.exe scripts\check_database_connection.py
-```
-
-Prefer Neon’s **direct** connection string for Alembic. Do not commit real URLs.
-
-## Railway
-
-On the Railway **backend** service, set `DATABASE_URL` and `JWT_SECRET_KEY` (and related JWT vars). Do not commit secrets.
+`CORS_ORIGINS` is a comma-separated allow-list. Do not use `*`. Include the deployed Vercel origin exactly (https, no path).

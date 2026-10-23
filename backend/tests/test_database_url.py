@@ -67,3 +67,26 @@ def test_redact_hides_password():
     assert "super-secret" not in redacted
     assert "localhost" in redacted
     assert "trustvault_db" in redacted
+
+
+def test_migration_url_prefers_direct_url(monkeypatch):
+    """Alembic should use DIRECT_URL when set; API traffic still uses DATABASE_URL."""
+    from app.core.config import Settings, get_settings
+
+    get_settings.cache_clear()
+    monkeypatch.setenv(
+        "DATABASE_URL",
+        "postgresql+psycopg://u:p@ep-x-pooler.example/neondb?sslmode=require",
+    )
+    monkeypatch.setenv(
+        "DIRECT_URL",
+        "postgresql+psycopg://u:p@ep-x.example/neondb?sslmode=require",
+    )
+    monkeypatch.setenv("JWT_SECRET_KEY", "x" * 48)
+    try:
+        settings = Settings()
+        assert "pooler" in settings.database_url
+        assert "pooler" not in settings.migration_database_url
+        assert settings.migration_database_url == settings.direct_url
+    finally:
+        get_settings.cache_clear()

@@ -31,6 +31,9 @@ class Settings(BaseSettings):
         alias="CORS_ORIGINS",
     )
     database_url: str = Field(alias="DATABASE_URL")
+    # Optional Neon direct (non-pooler) URL for Alembic only. When unset,
+    # migrations use DATABASE_URL. Never required for normal API traffic.
+    direct_url: str | None = Field(default=None, alias="DIRECT_URL")
 
     # JWT — required before issuing or validating access tokens.
     jwt_secret_key: str | None = Field(default=None, alias="JWT_SECRET_KEY")
@@ -56,6 +59,13 @@ class Settings(BaseSettings):
     def validate_database_url(cls, value: str) -> str:
         return normalize_database_url(value)
 
+    @field_validator("direct_url")
+    @classmethod
+    def validate_direct_url(cls, value: str | None) -> str | None:
+        if value is None or not str(value).strip():
+            return None
+        return normalize_database_url(value)
+
     @model_validator(mode="after")
     def validate_jwt_algorithm(self) -> "Settings":
         if self.jwt_algorithm != "HS256":
@@ -66,6 +76,11 @@ class Settings(BaseSettings):
     def cors_origin_list(self) -> list[str]:
         origins = [origin.strip() for origin in self.cors_origins.split(",")]
         return [origin for origin in origins if origin]
+
+    @property
+    def migration_database_url(self) -> str:
+        """URL Alembic should use (DIRECT_URL when set, else DATABASE_URL)."""
+        return self.direct_url or self.database_url
 
     @property
     def resolved_jwt_secret(self) -> str:

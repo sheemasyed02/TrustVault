@@ -20,8 +20,9 @@ target_metadata = Base.metadata
 
 
 def get_url() -> str:
+    # Prefer DIRECT_URL (Neon non-pooler) for DDL; fall back to DATABASE_URL.
     # Password is never logged; Alembic uses the URL only for the connection.
-    return get_settings().database_url
+    return get_settings().migration_database_url
 
 
 def run_migrations_offline() -> None:

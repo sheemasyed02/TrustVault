@@ -13,7 +13,7 @@ This is not merely a CRUD application or a static dashboard. Security and verifi
 - Database: PostgreSQL.
 - ORM and migrations: SQLAlchemy and Alembic.
 - File storage: private Cloudflare R2 using its S3-compatible API.
-- Hosting: Railway for FastAPI and PostgreSQL; Vercel for Next.js.
+- Hosting: Vercel for Next.js; Render for FastAPI; Neon for PostgreSQL; Cloudflare R2 for private files.
 - Automated backend tests: pytest.
 - Version control: Git and GitHub.
 
