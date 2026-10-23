@@ -296,6 +296,9 @@ def append_audit_event_committed(
     """
     session = get_session_factory()()
     try:
+        # Fail fast when another transaction holds the audit-chain advisory
+        # lock (common under pytest SAVEPOINT fixtures) instead of hanging.
+        session.execute(text("SET LOCAL lock_timeout = '5s'"))
         event = append_audit_event(
             session,
             action=action,

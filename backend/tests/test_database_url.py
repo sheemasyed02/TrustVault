@@ -1,4 +1,4 @@
-"""Unit tests for DATABASE_URL validation."""
+"""Unit tests for DATABASE_URL validation (no live database connection)."""
 
 import pytest
 
@@ -19,6 +19,35 @@ def test_normalize_asyncpg_url_to_psycopg():
         )
         == "postgresql+psycopg://user:secret@localhost:5432/trustvault_db"
     )
+
+
+def test_normalize_preserves_neon_ssl_query_params():
+    """Neon direct URLs keep sslmode/channel_binding after scheme rewrite."""
+    raw = (
+        "postgresql://user:secret@ep-example.us-east-2.aws.neon.tech/neondb"
+        "?sslmode=require&channel_binding=require"
+    )
+    normalized = normalize_database_url(raw)
+    assert normalized.startswith("postgresql+psycopg://")
+    assert "sslmode=require" in normalized
+    assert "channel_binding=require" in normalized
+    assert "secret" in normalized  # still present in URL object for the driver
+    assert "secret" not in redact_database_url(normalized)
+
+
+def test_normalize_preserves_pooler_host_and_query():
+    raw = (
+        "postgresql://user:secret@ep-example-pooler.us-east-2.aws.neon.tech/neondb"
+        "?sslmode=require"
+    )
+    normalized = normalize_database_url(raw)
+    assert "-pooler." in normalized
+    assert normalized.endswith("?sslmode=require") or "?sslmode=require" in normalized
+
+
+def test_reject_empty_database_url():
+    with pytest.raises(DatabaseURLError, match="required"):
+        normalize_database_url("   ")
 
 
 def test_reject_sqlite_fallback():

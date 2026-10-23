@@ -21,13 +21,16 @@ def get_engine() -> Engine:
     if _engine is None:
         settings = get_settings()
         # Pytest resets the engine often; NullPool avoids exhausting Postgres
-        # max_connections across a large suite.
+        # max_connections across a large suite. Short connect_timeout fails
+        # fast on DNS/network errors instead of multi-minute hangs.
         engine_kwargs: dict = {"pool_pre_ping": True}
         if "pytest" in sys.modules:
             engine_kwargs["poolclass"] = NullPool
+            engine_kwargs["connect_args"] = {"connect_timeout": 15}
         else:
             engine_kwargs["pool_size"] = 5
             engine_kwargs["max_overflow"] = 10
+            engine_kwargs["connect_args"] = {"connect_timeout": 15}
         _engine = create_engine(settings.database_url, **engine_kwargs)
         _SessionLocal = sessionmaker(
             bind=_engine,

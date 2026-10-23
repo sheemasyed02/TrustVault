@@ -24,13 +24,14 @@ def redact_database_url(url: str) -> str:
 def normalize_database_url(url: str) -> str:
     """Require PostgreSQL and normalize to the sync psycopg driver.
 
-    Accepts common Railway/local forms:
+    Accepts common Neon / Railway / local forms:
     - postgresql://...
     - postgres://...
     - postgresql+psycopg://...
     - postgresql+asyncpg://... (remapped to sync psycopg for SQLAlchemy/Alembic)
 
-    Rejects SQLite and in-memory URLs.
+    Query parameters (for example Neon ``sslmode`` / ``channel_binding``) are
+    preserved. Rejects SQLite and in-memory URLs.
     """
     cleaned = (url or "").strip()
     if not cleaned:

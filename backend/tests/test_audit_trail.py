@@ -444,6 +444,7 @@ def test_login_failure_creates_denied_audit_event(
     # Persist the user in a committed session so login can authenticate lookup
     # and the independent denial writer can attribute actor_id.
     email = f"login-bad-{uuid.uuid4()}@example.com"
+    wrong_password = "wrong-password-xx"
     user_id = None
     writer = get_session_factory()()
     try:
@@ -463,26 +464,109 @@ def test_login_failure_creates_denied_audit_event(
     try:
         bad = client.post(
             "/auth/login",
-            json={"email": email, "password": "wrong-password-xx"},
+            json={"email": email, "password": wrong_password},
         )
         assert bad.status_code == 401
-        denied = db_session.scalar(
-            select(AuditEvent)
-            .where(
-                AuditEvent.action == "LOGIN",
-                AuditEvent.outcome == "DENIED",
-                AuditEvent.actor_id == user_id,
-                AuditEvent.reason_code == "INVALID_CREDENTIALS",
+        assert bad.json()["detail"] == "Invalid email or password"
+        # Independently committed denial must be read from a fresh session —
+        # not only via the SAVEPOINT-scoped fixture connection.
+        reader = get_session_factory()()
+        try:
+            denied = reader.scalar(
+                select(AuditEvent)
+                .where(
+                    AuditEvent.action == "LOGIN",
+                    AuditEvent.outcome == "DENIED",
+                    AuditEvent.actor_id == user_id,
+                    AuditEvent.reason_code == "INVALID_CREDENTIALS",
+                )
+                .order_by(AuditEvent.created_at.desc())
+                .limit(1)
             )
-            .order_by(AuditEvent.created_at.desc())
-            .limit(1)
-        )
+        finally:
+            reader.close()
         assert denied is not None
         meta = denied.metadata_json or {}
         assert "password" not in meta
         assert "token" not in meta
+        assert wrong_password not in str(meta)
+        assert "audit-password-12" not in str(meta)
+        blob = f"{denied.action}{denied.outcome}{denied.reason_code}{meta}"
+        assert "wrong-password" not in blob
     finally:
         # Independently committed user + DENIED audit must not pollute the live DB.
+        cleaner = get_session_factory()()
+        try:
+            if user_id is not None:
+                cleaner.execute(
+                    text("DELETE FROM audit_events WHERE actor_id = :uid"),
+                    {"uid": str(user_id)},
+                )
+                cleaner.execute(
+                    text("DELETE FROM users WHERE id = :uid"),
+                    {"uid": str(user_id)},
+                )
+                cleaner.commit()
+        finally:
+            cleaner.close()
+
+
+def test_invalid_login_denied_audit_excludes_credentials(
+    client: TestClient,
+    auth_settings: Settings,
+):
+    """Regression: invalid login writes DENIED LOGIN without storing secrets."""
+    del auth_settings
+    email = f"login-regression-{uuid.uuid4()}@example.com"
+    submitted_password = "super-secret-should-never-be-audited"
+    user_id = None
+    writer = get_session_factory()()
+    try:
+        user = User(
+            name="Regression Audit",
+            email=email,
+            password_hash=hash_password("correct-password-99"),
+            role="VIEWER",
+            is_active=True,
+        )
+        writer.add(user)
+        writer.commit()
+        user_id = user.id
+    finally:
+        writer.close()
+
+    try:
+        response = client.post(
+            "/auth/login",
+            json={"email": email, "password": submitted_password},
+        )
+        assert response.status_code == 401
+
+        reader = get_session_factory()()
+        try:
+            event = reader.scalar(
+                select(AuditEvent)
+                .where(
+                    AuditEvent.action == "LOGIN",
+                    AuditEvent.outcome == "DENIED",
+                    AuditEvent.actor_id == user_id,
+                    AuditEvent.reason_code == "INVALID_CREDENTIALS",
+                )
+                .order_by(AuditEvent.created_at.desc())
+                .limit(1)
+            )
+            assert event is not None
+            serialized = (
+                f"{event.reason_code}|{event.request_id}|"
+                f"{event.metadata_json}|{event.event_hash}"
+            )
+            assert submitted_password not in serialized
+            assert "correct-password-99" not in serialized
+            assert "password" not in (event.metadata_json or {})
+            assert "token" not in (event.metadata_json or {})
+        finally:
+            reader.close()
+    finally:
         cleaner = get_session_factory()()
         try:
             if user_id is not None:

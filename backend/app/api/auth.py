@@ -6,16 +6,16 @@ import logging
 import uuid
 
 from fastapi import APIRouter, Depends, Header, HTTPException, status
-from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.config import Settings, get_settings
-from app.db.models import User
 from app.db.session import get_db
 from app.schemas.auth import LoginRequest, LoginResponse, RegisterRequest, RegisterResponse
 from app.services.audit_trail import append_audit_event, append_audit_event_committed
 from app.services.auth_service import (
     GENERIC_AUTH_FAILURE,
+    AuthFailure,
+    AuthSuccess,
     authenticate_user,
     normalize_email,
 )
@@ -116,21 +116,21 @@ def login(
             detail="Authentication is not configured",
         ) from None
 
-    if result is None:
-        user = session.scalar(select(User).where(User.email == normalized))
-        reason = (
-            "INACTIVE_ACCOUNT"
-            if user is not None and not user.is_active
-            else "INVALID_CREDENTIALS"
-        )
+    if isinstance(result, AuthFailure):
+        # Actor/reason come from the auth lookup — do not re-query (avoids
+        # session visibility edges) and never put password/token in metadata.
         try:
             append_audit_event_committed(
                 action="LOGIN",
                 outcome="DENIED",
-                actor_id=user.id if user is not None else None,
-                reason_code=reason,
+                actor_id=result.actor_id,
+                reason_code=result.reason_code,
                 request_id=request_id,
-                metadata={"email_domain": normalized.split("@")[-1] if "@" in normalized else None},
+                metadata={
+                    "email_domain": (
+                        normalized.split("@")[-1] if "@" in normalized else None
+                    ),
+                },
             )
         except Exception:
             logger.exception(
@@ -142,21 +142,13 @@ def login(
             detail=GENERIC_AUTH_FAILURE,
         )
 
-    access_token, expires_at, expires_in = result
-    user = session.scalar(select(User).where(User.email == normalized))
-    if user is None:
-        # Should not happen after successful authenticate_user.
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail=GENERIC_AUTH_FAILURE,
-        )
-
+    assert isinstance(result, AuthSuccess)
     try:
         append_audit_event(
             session,
             action="LOGIN",
             outcome="SUCCESS",
-            actor_id=user.id,
+            actor_id=result.user_id,
             reason_code=None,
             request_id=request_id,
         )
@@ -168,8 +160,8 @@ def login(
         ) from exc
 
     return LoginResponse(
-        access_token=access_token,
+        access_token=result.access_token,
         token_type="bearer",
-        expires_at=expires_at,
-        expires_in=expires_in,
+        expires_at=result.expires_at,
+        expires_in=result.expires_in,
     )
