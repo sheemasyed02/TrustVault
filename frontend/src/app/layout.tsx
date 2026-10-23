@@ -7,9 +7,16 @@ import { SiteHeader } from "@/components/site-header";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "TrustVault",
+  title: {
+    default: "TrustVault",
+    template: "%s · TrustVault",
+  },
   description:
     "Secure document sharing with server-side access control and an auditable activity trail.",
+  icons: {
+    icon: [{ url: "/trust.png", type: "image/png" }],
+    apple: [{ url: "/trust.png", type: "image/png" }],
+  },
 };
 
 export default function RootLayout({

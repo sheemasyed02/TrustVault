@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import { useState, type ReactNode } from "react";
 
 import { useAuth } from "@/components/auth-provider";
+import { BrandLogo } from "@/components/brand-logo";
 import { Button } from "@/components/ui/button";
 import { getNavItemsForRole, isNavItemActive } from "@/lib/nav";
 
@@ -59,9 +60,12 @@ export function AppShell({ children }: { children: ReactNode }) {
     <div className="mx-auto flex w-full max-w-6xl flex-1 flex-col gap-5 px-4 py-5 md:flex-row md:gap-8 md:px-8 md:py-8">
       <aside className="md:w-56 md:shrink-0">
         <div className="flex items-center justify-between gap-3 md:block">
-          <div>
-            <p className="font-display text-xl text-foreground">TrustVault</p>
-            <p className="mt-0.5 text-xs text-muted">{user.role} workspace</p>
+          <div className="flex items-center gap-2.5">
+            <BrandLogo size="sm" decorative />
+            <div>
+              <p className="font-display text-xl text-foreground">TrustVault</p>
+              <p className="mt-0.5 text-xs text-muted">{user.role} workspace</p>
+            </div>
           </div>
           <Button
             size="sm"

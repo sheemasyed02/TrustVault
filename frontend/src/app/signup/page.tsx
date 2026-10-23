@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useId, useState, type FormEvent } from "react";
 
+import { BrandLogo } from "@/components/brand-logo";
 import { ApiError, registerRequest } from "@/lib/api";
 
 export default function SignupPage() {
@@ -70,9 +71,12 @@ export default function SignupPage() {
         <p className="text-sm font-semibold uppercase tracking-[0.18em] text-accent-strong">
           Create account
         </p>
-        <h1 className="mt-4 font-display text-4xl leading-tight tracking-tight text-foreground md:text-5xl">
-          TrustVault
-        </h1>
+        <div className="mt-4 flex items-center gap-3 md:gap-4">
+          <BrandLogo size="lg" decorative priority />
+          <h1 className="font-display text-4xl leading-tight tracking-tight text-foreground md:text-5xl">
+            TrustVault
+          </h1>
+        </div>
         <p className="mt-4 max-w-md text-base leading-7 text-muted md:text-lg">
           Public registration creates a Viewer account. You cannot choose Owner
           or Administrator during signup — request owner access after signing in

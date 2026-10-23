@@ -1,5 +1,6 @@
 import { Suspense } from "react";
 
+import { BrandLogo } from "@/components/brand-logo";
 import { LoginEntry } from "@/components/login-entry";
 
 export default function HomePage() {
@@ -9,9 +10,12 @@ export default function HomePage() {
         <p className="text-sm font-semibold uppercase tracking-[0.18em] text-accent-strong">
           Confidential documents
         </p>
-        <h1 className="mt-4 font-display text-4xl leading-tight tracking-tight text-foreground md:text-5xl">
-          TrustVault
-        </h1>
+        <div className="mt-4 flex items-center gap-3 md:gap-4">
+          <BrandLogo size="lg" decorative priority />
+          <h1 className="font-display text-4xl leading-tight tracking-tight text-foreground md:text-5xl">
+            TrustVault
+          </h1>
+        </div>
         <p className="mt-4 max-w-md text-base leading-7 text-muted md:text-lg">
           Sign in to access documents shared with named permissions. The server
           decides every read, download, and share — not the browser.
