@@ -103,9 +103,9 @@ Tests cited below are real modules under `backend/tests/` (including `tests/secu
 | | |
 | --- | --- |
 | **Impact** | Malicious origin reads API responses with victim cookies/tokens |
-| **Mitigation** | Explicit `CORS_ORIGINS` list (default localhost only). Credentials allowed only for listed origins. Not `*` |
-| **Tests** | `test_security_gaps.py::test_cors_does_not_allow_wildcard_by_default` |
-| **Residual** | Mis-set production `CORS_ORIGINS` could widen access |
+| **Mitigation** | Explicit `CORS_ORIGINS` list (default localhost only). Credentials allowed only for listed origins. Not `*`. Startup **rejects** a wildcard origin when credentials are enabled. Production must list the exact Vercel origin(s) on Render |
+| **Tests** | `tests/security/test_security_gaps.py::test_cors_does_not_allow_wildcard_by_default` |
+| **Residual** | Mis-set production `CORS_ORIGINS` could widen access; Preview deployment URLs must be added explicitly if used |
 
 ### 11. Brute-force login / rate limiting
 
@@ -184,9 +184,18 @@ Tests cited below are real modules under `backend/tests/` (including `tests/secu
 | | |
 | --- | --- |
 | **Impact** | JWT secret or R2 keys leak |
-| **Mitigation** | `.env` gitignored; example placeholders; no `NEXT_PUBLIC_` secrets for signing/R2; audit/logging policy excludes passwords/tokens/bytes |
-| **Tests** | Login failure does not echo password; audit sanitize metadata |
+| **Mitigation** | `.env` gitignored; example placeholders; no `NEXT_PUBLIC_` secrets for signing/R2; audit/logging policy excludes passwords/tokens/bytes; interactive OpenAPI (`/docs`, `/redoc`, `/openapi.json`) disabled when `APP_ENV=production` |
+| **Tests** | Login failure does not echo password; audit sanitize metadata; `test_health.py::test_production_hides_openapi_docs` |
 | **Residual** | Developers may still paste secrets into tickets; dependency on correct deploy config |
+
+### 18b. Deployment topology (ops)
+
+| | |
+| --- | --- |
+| **Impact** | Wrong DB, public R2, or missing CORS breaks confidentiality |
+| **Mitigation** | Intended hosts: Vercel (frontend), Render (API), Neon (PostgreSQL), private Cloudflare R2. App uses `DATABASE_URL`; Alembic prefers optional `DIRECT_URL`. No auto-migrate / auto-seed / schema reset on API startup. Downloads stream via API after authz only |
+| **Tests** | Local regression suite against `TEST_DATABASE_URL` (isolated `trustvault_test`); R2 helpers have no public/presign methods |
+| **Residual** | Live Neon connectivity and Render/Vercel smoke must be verified in the operator’s network — not claimed from offline local runs alone |
 
 ### 19. Dependency vulnerabilities, backups, retention, DoS
 

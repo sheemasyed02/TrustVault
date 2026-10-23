@@ -356,3 +356,28 @@ I still review diffs, run tests myself, and refuse fake “all green” claims w
 - One remaining intentional leak path: `test_login_failure_creates_denied_audit_event` used a real committed session — fixed with post-test cleanup of that user + related audit rows.
 - Backend `pytest -q` → **252 passed**; post-suite purge dry-run → **No leaked test users found.**
 - Frontend `npm test -- --run` → **59 passed** (16 files) after updating admin users Vitest.
+
+---
+
+## Task 22 � Final security review + deployment hardening (2026-10-23)
+
+**What I asked for:** Final review of authz, secrets/CORS/R2, migrations, audit integrity, full regression, honest deploy smoke status; update THREATS/PERMISSIONS/API/README/PROMPTS. Fix real defects only.
+
+**What was inspected (no rewrite of working authz):**
+- Every document/admin/permission/promotion route uses `get_current_user` / `require_admin` and DB-backed document authorization.
+- Ownership from `documents.owner_id`; READ cannot metadata-edit; EDIT cannot grant/delete; ADMIN cannot download without grant; inactive users 401 on next request; revoke re-checked from PostgreSQL.
+- `.env` gitignored; frontend only `NEXT_PUBLIC_API_BASE_URL`; no tracked secret values found by pattern scan.
+- Startup does not seed, migrate, or reset schema. Upload compensates R2 on DB failure; delete soft-deletes first then R2 (503 + tombstone if R2 fails).
+- Audit tamper/non-admin denial covered by `tests/test_audit_trail.py` + security matrix.
+
+**Defect fixed:**
+1. Production OpenAPI surface (`/docs`, `/redoc`, `/openapi.json`) disabled when `APP_ENV=production` � reduces reconnaissance surface.
+2. README incorrectly said uploads include PDF � corrected to DOCX-only.
+3. Documented `GET /health/ready` and production CORS/OpenAPI behavior in API docs + threat model.
+
+**What was not claimed:** Live Render/Vercel/Neon smoke. Local Neon hostname resolution failed earlier; frontend `NEXT_PUBLIC_API_BASE_URL` points at localhost only in this workspace. Operators must run the smoke checklist against real hosts.
+
+**How I checked:**
+- Backend `pytest -q` ? **334 passed** (~92s on local `trustvault_test`)
+- Security-focused subset (health/audit/security/access/authz/r2) ? **131 passed**
+- Frontend Vitest ? **60 passed**; `npm run build` ? success

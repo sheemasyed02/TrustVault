@@ -19,7 +19,7 @@ Project rules: see [`AGENTS.md`](AGENTS.md).
 
 - Login / logout (memory-only access token on the frontend; `Authorization: Bearer`)
 - Role-aware navigation (ADMIN / OWNER / VIEWER) — **UI only**; API enforces authz
-- Document upload (DOCX/PDF), list, details, search/filter, metadata edit, soft-delete
+- Document upload (**DOCX only**), list, details, search/filter, metadata edit, soft-delete
 - Private R2 storage with opaque keys; downloads stream through the API after authz
 - Per-document READ / EDIT grants with immediate revocation
 - In-app DOCX preview/edit for owner and EDIT grantees
@@ -244,6 +244,18 @@ Health JSON must never include connection strings, passwords, or document conten
 
 ---
 
+## Final security review notes (local)
+
+Authorization is enforced in FastAPI against PostgreSQL on every protected document/admin route. The frontend cannot bypass those checks. ADMIN audit APIs return metadata only (no document bytes). Hash-chain integrity is verifiable via `GET /admin/audit/integrity` but is **not** tamper-proof against a privileged DBA who rewrites the audit table (see `THREATS.md` §13).
+
+Local regression evidence from the final review run (isolated `TEST_DATABASE_URL` → `trustvault_test`):
+
+- Backend `pytest -q` → **334 passed**
+- Frontend `npm test -- --run` → **60 passed**
+- Frontend `npm run build` → success
+
+**Deployed** Render/Vercel/Neon smoke tests are **not** claimed here unless executed against live hosts with configured URLs.
+
 ## Tests
 
 ### Backend (targeted / CI-friendly)
@@ -255,7 +267,7 @@ cd D:\TrustVault\backend
 pytest -q tests/test_health.py tests/test_database_url.py tests/test_test_database_config.py
 ```
 
-### Backend (full suite — only when explicitly requested)
+### Backend (full suite)
 
 ```powershell
 pytest -q
