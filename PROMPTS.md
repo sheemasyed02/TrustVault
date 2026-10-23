@@ -130,7 +130,7 @@ This is my working log. I used Cursor to help write code, but I gave the rules, 
 
 ---
 
-## Task 11 — Document dashboard + search (2026-10-21)
+## Task 11 — Document dashboard + search 
 
 **What I asked for:** Real dashboard / My Documents / Shared With Me against `GET /documents`. No fake rows. No upload/edit/share forms yet. Server-side search + pagination only.
 
@@ -154,7 +154,7 @@ This is my working log. I used Cursor to help write code, but I gave the rules, 
 
 ---
 
-## Task 12 — Document upload / details / edit / download / sharing UI (2026-10-21)
+## Task 12 — Document upload / details / edit / download / sharing UI 
 
 **What I asked for:** Wire the real document lifecycle to FastAPI — upload, details, download, metadata PATCH, grant/revoke, owner delete. No admin/audit UI. No fake users or fake success.
 
@@ -178,7 +178,7 @@ This is my working log. I used Cursor to help write code, but I gave the rules, 
 
 ---
 
-## Task 13 — Owner/EDIT in-app edit; READ view-only (2026-10-21)
+## Task 13 — Owner/EDIT in-app edit; READ view-only 
 
 **What I asked for:** On the document view page, owners can edit. Viewers with READ only read; viewers with EDIT can edit content/metadata like the owner (still no share/delete).
 
@@ -191,7 +191,7 @@ This is my working log. I used Cursor to help write code, but I gave the rules, 
 
 ---
 
-## Task 14 — Security matrix, threat model, authz-removal demo (2026-10-21)
+## Task 14 — Security matrix, threat model, authz-removal demo 
 
 **What I asked for:** Inspect routes/authz/tests/docs; add a dedicated security regression matrix; close documentation gaps in THREATS/PERMISSIONS/README; demonstrate that removing download authorization fails a real IDOR test; do not invent controls.
 
@@ -206,7 +206,7 @@ This is my working log. I used Cursor to help write code, but I gave the rules, 
 
 ---
 
-## Task 15 — Administrator dashboard UI (2026-10-21)
+## Task 15 — Administrator dashboard UI 
 
 **What I asked for:** Role-protected admin dashboard wired to real admin APIs — summary counts, audit log filters/pagination/verify, user activate/deactivate with confirmation, last-active-admin protection, no document content bypass.
 
@@ -222,7 +222,7 @@ This is my working log. I used Cursor to help write code, but I gave the rules, 
 
 ---
 
-## Task 16 — Durable audit hash chain + admin APIs (2026-10-21)
+## Task 16 — Durable audit hash chain + admin APIs 
 
 **What I asked for:** Tamper-evident audit trail with ADMIN-only listing and integrity verification; record login/document/permission/admin actions; concurrency-safe appends; honest THREATS.md limits.
 
@@ -247,7 +247,7 @@ This is my working log. I used Cursor to help write code, but I gave the rules, 
 
 ---
 
-## Bugfix ? upload vanished + R2 env loading (2026-10-21)
+## Bugfix ? upload vanished + R2 env loading 
 
 **Symptoms:** Owner upload looked successful then the document disappeared; R2 seemed broken depending on how the API was started.
 
@@ -261,7 +261,7 @@ This is my working log. I used Cursor to help write code, but I gave the rules, 
 
 ---
 
-## Task 17 — Permission audit vs hackathon role model (2026-10-21)
+## Task 17 — Permission audit vs hackathon role model 
 
 **What I asked for:** Audit ADMIN/OWNER/VIEWER vs document READ/EDIT; fix mismatches; regression tests; update PERMISSIONS/API docs. No hosting/deploy changes.
 
@@ -273,7 +273,7 @@ This is my working log. I used Cursor to help write code, but I gave the rules, 
 
 ---
 
-## Task 18 — Role-aware UI workflows (2026-10-21)
+## Task 18 — Role-aware UI workflows 
 
 **What I asked for:** Post-login role homes; OWNER/VIEWER/ADMIN workflows with real APIs; READ vs EDIT badges; revoke clears client content; admin integrity from API `valid`; tests + build. No template rewrite / deploy.
 
@@ -295,7 +295,7 @@ This is my working log. I used Cursor to help write code, but I gave the rules, 
 
 ---
 
-## Task 19 — Acceptance verification + authz-removal demo (2026-10-21)
+## Task 19 — Acceptance verification + authz-removal demo 
 
 **What I asked for:** Acceptance checklist mapping brief → tests; E2E journey; search/upload/R2 checks; controlled authz-removal demo; full validation; readiness report; commit docs/fixes only. No deploy / DB provider change.
 
@@ -313,7 +313,7 @@ This is my working log. I used Cursor to help write code, but I gave the rules, 
 
 ---
 
-## Task 20 — Stop “mock users” in Admin Users + expand demo accounts (2026-10-21)
+## Task 20 — Stop “mock users” in Admin Users + expand demo accounts 
 
 **What I asked for:** Fix Admin Users filling with fake accounts on login; add more OWNER/VIEWER demos alongside snovasys/sheema/user; verify against the full brief and fill any missing floor features.
 
@@ -331,3 +331,58 @@ This is my working log. I used Cursor to help write code, but I gave the rules, 
 - One remaining intentional leak path: `test_login_failure_creates_denied_audit_event` used a real committed session — fixed with post-test cleanup of that user + related audit rows.
 - Backend `pytest -q` → **252 passed**; post-suite purge dry-run → **No leaked test users found.**
 - Frontend `npm test -- --run` → **59 passed** (16 files) after updating admin users Vitest.
+
+---
+
+---
+
+## Task 21 — Final security review + deployment hardening 
+
+**What I asked for:** Final review of authz, secrets/CORS/R2, migrations, audit integrity, full regression, honest deploy smoke status; update THREATS/PERMISSIONS/API/README/PROMPTS. Fix real defects only. Do not invent live URL success.
+
+**What the AI generated / inspected:** Route-by-route authn/authz review; confirmed document ownership and grants come from PostgreSQL; confirmed ADMIN audit is metadata-only; confirmed no auto-seed/migrate on startup.
+
+**What was wrong or incomplete:**
+1. Interactive OpenAPI (`/docs`, `/redoc`, `/openapi.json`) remained enabled even for production `APP_ENV`.
+2. README briefly implied PDF uploads; uploads are **DOCX only**.
+3. `/health/ready` existed in code but was under-documented.
+
+**How it was corrected:** Disabled OpenAPI surfaces when `APP_ENV=production`; corrected DOCX-only wording; documented readiness + CORS/OpenAPI behavior in API/THREATS/README.
+
+**How I checked (local `trustvault_test`, not Neon production):**
+- Backend `pytest -q` → **334 passed**
+- Security-focused subset → **131 passed**
+- Frontend Vitest → **60 passed**; `npm run build` → success
+- Live Render/Vercel/Neon smoke → **not performed**
+
+**Commit note:** Temporary agent commit `713764a` existed briefly; maintainer reset history so humans own the final commit. Keep these changes in the working tree / your commit.
+
+---
+
+## Task 22 — Hackathon final deliverables pack 
+
+**What I asked for:** Complete README (problem, features, architecture, setup, env names, R2, migrations, tests, demo accounts, limits); architecture/trade-offs; five-minute demo script; interview Q&A; PROMPTS accuracy; repo checks. No invented URLs or fake test claims. Human owns git commits.
+
+**What the AI generated:** Rewrote `README.md`; added `DEMO.md` and `INTERVIEW_PREP.md`; restored `ACCEPTANCE.md` from earlier history; kept deployed URL table blank/unverified (`NEXT_PUBLIC_API_BASE_URL=http://127.0.0.1:8000` only in this workspace).
+
+**What was wrong until corrected:**
+1. Merge conflict markers left in `README.md` after a bad merge commit.
+2. `DEMO.md` / `INTERVIEW_PREP.md` missing from the tree after conflict resolution.
+3. Placeholder hosts could be misread as live URLs — clarified as unverified.
+
+**How verified:** See Task 23 / session report for the latest pytest/vitest/build numbers after the conflict cleanup. Deployed public URLs remain **untested** unless you verify them yourself.
+
+---
+
+## Task 23 — Resolve merge-conflicted markdown deliverables 
+
+**What I asked for:** After merging, MD files were committed with conflicts / missing demo docs. Verify and rewrite so README and related docs match the hackathon deliverable brief.
+
+**What was wrong:**
+- `README.md` contained `<<<<<<<` / `=======` / `>>>>>>>` markers.
+- `DEMO.md`, `INTERVIEW_PREP.md`, and `ACCEPTANCE.md` were missing.
+- `PROMPTS.md` had encoding corruption and incomplete late tasks.
+
+**What was corrected:** Clean conflict-free README; restored DEMO/INTERVIEW from dangling commit `35e4a3e`; restored ACCEPTANCE from `dae4d95`; normalized PROMPTS and completed Tasks 21–23 honestly (no invented live URLs).
+
+**How verified (this cleanup):** conflict-marker scan on project `*.md` → none; required files present. Re-run backend/frontend tests if requested in the same session and record exact counts in the report.

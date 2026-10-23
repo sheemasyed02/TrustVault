@@ -85,22 +85,7 @@ FastAPI (Render) ── validates JWT + loads active user from PostgreSQL
 | Files | Private Cloudflare R2 (S3-compatible, boto3) |
 | Tests | pytest (backend), Vitest (frontend) |
 
-<<<<<<< HEAD
-Rules: [`AGENTS.md`](AGENTS.md).
-=======
-Project rules: see [`AGENTS.md`](AGENTS.md).
-
-## Current capabilities
-
-- Login / logout (memory-only access token on the frontend; `Authorization: Bearer`)
-- Role-aware navigation (ADMIN / OWNER / VIEWER) — **UI only**; API enforces authz
-- Document upload (**DOCX only**), list, details, search/filter, metadata edit, soft-delete
-- Private R2 storage with opaque keys; downloads stream through the API after authz
-- Per-document READ / EDIT grants with immediate revocation
-- In-app DOCX preview/edit for owner and EDIT grantees
-- Admin dashboard: user activate/deactivate, audit list/filters, hash-chain verify
-- Durable audit hash chain (not DBA-proof; see [`THREATS.md`](THREATS.md))
->>>>>>> 713764af2698b4df5fc18526196849ed9a7906ea
+Project rules: [`AGENTS.md`](AGENTS.md).
 
 ## Repository layout
 
@@ -244,18 +229,6 @@ python -m app.cli.seed_demo_users
 
 Passwords are **not** printed by the seed command and must not be pasted into this README. Login never creates users. Do not auto-seed on Render startup.
 
-## Final security review notes (local)
-
-Authorization is enforced in FastAPI against PostgreSQL on every protected document/admin route. The frontend cannot bypass those checks. ADMIN audit APIs return metadata only (no document bytes). Hash-chain integrity is verifiable via `GET /admin/audit/integrity` but is **not** tamper-proof against a privileged DBA who rewrites the audit table (see `THREATS.md` §13).
-
-Local regression evidence from the final review run (isolated `TEST_DATABASE_URL` → `trustvault_test`):
-
-- Backend `pytest -q` → **334 passed**
-- Frontend `npm test -- --run` → **60 passed**
-- Frontend `npm run build` → success
-
-**Deployed** Render/Vercel/Neon smoke tests are **not** claimed here unless executed against live hosts with configured URLs.
-
 ## Tests
 
 Requires isolated `TEST_DATABASE_URL` (name must contain `test`; never production `neondb`).
@@ -263,16 +236,6 @@ Requires isolated `TEST_DATABASE_URL` (name must contain `test`; never productio
 ```powershell
 cd D:\TrustVault\backend
 .\.venv\Scripts\Activate.ps1
-<<<<<<< HEAD
-=======
-# Requires TEST_DATABASE_URL → local trustvault_test (see backend/.env.example)
-pytest -q tests/test_health.py tests/test_database_url.py tests/test_test_database_config.py
-```
-
-### Backend (full suite)
-
-```powershell
->>>>>>> 713764af2698b4df5fc18526196849ed9a7906ea
 pytest -q
 ```
 
