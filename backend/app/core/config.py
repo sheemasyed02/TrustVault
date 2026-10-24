@@ -54,6 +54,29 @@ class Settings(BaseSettings):
     r2_bucket_name: str | None = Field(default=None, alias="R2_BUCKET_NAME")
     r2_endpoint_url: str | None = Field(default=None, alias="R2_ENDPOINT_URL")
 
+    # Password reset + Brevo transactional email — optional until the feature runs.
+    frontend_base_url: str | None = Field(default=None, alias="FRONTEND_BASE_URL")
+    password_reset_token_expire_minutes: int = Field(
+        default=30,
+        alias="PASSWORD_RESET_TOKEN_EXPIRE_MINUTES",
+    )
+    brevo_api_key: str | None = Field(default=None, alias="BREVO_API_KEY")
+    brevo_sender_email: str | None = Field(default=None, alias="BREVO_SENDER_EMAIL")
+    brevo_sender_name: str | None = Field(default=None, alias="BREVO_SENDER_NAME")
+    # Forgot-password rate limits (process-local; hashed IP/email keys).
+    password_reset_rate_limit_ip_max: int = Field(
+        default=20,
+        alias="PASSWORD_RESET_RATE_LIMIT_IP_MAX",
+    )
+    password_reset_rate_limit_email_max: int = Field(
+        default=5,
+        alias="PASSWORD_RESET_RATE_LIMIT_EMAIL_MAX",
+    )
+    password_reset_rate_limit_window_seconds: int = Field(
+        default=3600,
+        alias="PASSWORD_RESET_RATE_LIMIT_WINDOW_SECONDS",
+    )
+
     @field_validator("database_url")
     @classmethod
     def validate_database_url(cls, value: str) -> str:

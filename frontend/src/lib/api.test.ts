@@ -4,9 +4,11 @@ import {
   ApiConfigError,
   ApiError,
   GENERIC_LOGIN_ERROR,
+  forgotPasswordRequest,
   getApiBaseUrl,
   getCurrentUserRequest,
   loginRequest,
+  resetPasswordRequest,
 } from "@/lib/api";
 
 describe("getApiBaseUrl", () => {
@@ -142,5 +144,92 @@ describe("getCurrentUserRequest", () => {
     expect((init?.headers as Record<string, string>).Authorization).toBe(
       "Bearer jwt-value",
     );
+  });
+});
+
+describe("forgotPasswordRequest", () => {
+  beforeEach(() => {
+    vi.stubGlobal("fetch", vi.fn());
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("posts email to /auth/forgot-password", async () => {
+    const fetchMock = vi.mocked(fetch);
+    fetchMock.mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          message:
+            "If an eligible account exists for that email, a password reset link will be sent.",
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      ),
+    );
+
+    const result = await forgotPasswordRequest("User@Example.com");
+    expect(result.message).toContain("eligible account");
+    const [url, init] = fetchMock.mock.calls[0]!;
+    expect(url).toBe("http://127.0.0.1:8000/auth/forgot-password");
+    expect(init?.method).toBe("POST");
+    expect(JSON.parse(String(init?.body))).toEqual({
+      email: "User@Example.com",
+    });
+    expect(JSON.stringify(init)).not.toContain("Authorization");
+  });
+});
+
+describe("resetPasswordRequest", () => {
+  beforeEach(() => {
+    vi.stubGlobal("fetch", vi.fn());
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("posts token and passwords to /auth/reset-password", async () => {
+    const fetchMock = vi.mocked(fetch);
+    fetchMock.mockResolvedValue(
+      new Response(JSON.stringify({ message: "Password updated." }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+
+    const result = await resetPasswordRequest({
+      token: "raw-reset-token",
+      new_password: "new-password-99",
+      confirm_password: "new-password-99",
+    });
+    expect(result.message).toContain("Password updated");
+    const [url, init] = fetchMock.mock.calls[0]!;
+    expect(url).toBe("http://127.0.0.1:8000/auth/reset-password");
+    expect(JSON.parse(String(init?.body))).toEqual({
+      token: "raw-reset-token",
+      new_password: "new-password-99",
+      confirm_password: "new-password-99",
+    });
+  });
+
+  it("maps invalid token responses to ApiError", async () => {
+    vi.mocked(fetch).mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          detail:
+            "This password reset link is invalid or has expired. Request a new one.",
+        }),
+        { status: 400, headers: { "Content-Type": "application/json" } },
+      ),
+    );
+
+    await expect(
+      resetPasswordRequest({
+        token: "bad",
+        new_password: "new-password-99",
+        confirm_password: "new-password-99",
+      }),
+    ).rejects.toMatchObject({ status: 400 });
   });
 });

@@ -35,3 +35,27 @@ class RegisterResponse(BaseModel):
     email: EmailStr
     role: str
     message: str
+
+
+class ForgotPasswordRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    email: EmailStr
+
+
+class ForgotPasswordResponse(BaseModel):
+    message: str
+
+
+class ResetPasswordRequest(BaseModel):
+    """Public password reset via email token. Matches self-service password policy."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    token: str = Field(min_length=1, max_length=512)
+    new_password: str = Field(min_length=10, max_length=128)
+    confirm_password: str = Field(min_length=10, max_length=128)
+
+
+class ResetPasswordResponse(BaseModel):
+    message: str

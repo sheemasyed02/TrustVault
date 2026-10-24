@@ -266,6 +266,40 @@ export async function registerRequest(
   });
 }
 
+export interface ForgotPasswordResponse {
+  message: string;
+}
+
+export async function forgotPasswordRequest(
+  email: string,
+  signal?: AbortSignal,
+): Promise<ForgotPasswordResponse> {
+  return apiRequest<ForgotPasswordResponse>("/auth/forgot-password", {
+    method: "POST",
+    body: { email },
+    signal,
+  });
+}
+
+export interface ResetPasswordResponse {
+  message: string;
+}
+
+export async function resetPasswordRequest(
+  body: {
+    token: string;
+    new_password: string;
+    confirm_password: string;
+  },
+  signal?: AbortSignal,
+): Promise<ResetPasswordResponse> {
+  return apiRequest<ResetPasswordResponse>("/auth/reset-password", {
+    method: "POST",
+    body,
+    signal,
+  });
+}
+
 export interface PromotionRequestItem {
   id: string;
   requester_id: string;

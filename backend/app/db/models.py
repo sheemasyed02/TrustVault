@@ -263,6 +263,50 @@ class OwnerPromotionRequest(Base):
     reviewer: Mapped[Optional["User"]] = relationship(foreign_keys=[reviewed_by])
 
 
+class PasswordResetToken(Base):
+    """Single-use password-reset token. Only the hash of the raw token is stored."""
+
+    __tablename__ = "password_reset_tokens"
+    __table_args__ = (
+        UniqueConstraint("token_hash", name="uq_password_reset_tokens_token_hash"),
+        Index("ix_password_reset_tokens_user_id", "user_id"),
+        Index("ix_password_reset_tokens_expires_at", "expires_at"),
+        Index("ix_password_reset_tokens_user_id_used_at", "user_id", "used_at"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        default=uuid.uuid4,
+    )
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    # SHA-256 hex digest of the raw token (never store the raw value).
+    token_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    expires_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+    )
+    used_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+    )
+
+    user: Mapped["User"] = relationship(foreign_keys=[user_id])
+
+    @property
+    def is_consumed(self) -> bool:
+        return self.used_at is not None
+
+
 class AuditEvent(Base):
     __tablename__ = "audit_events"
     __table_args__ = (

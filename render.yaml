@@ -46,3 +46,14 @@ services:
         sync: false
       - key: R2_ENDPOINT_URL
         sync: false
+      # Password reset (Brevo). Never put these in Vercel / frontend env.
+      - key: FRONTEND_BASE_URL
+        sync: false
+      - key: PASSWORD_RESET_TOKEN_EXPIRE_MINUTES
+        value: "30"
+      - key: BREVO_API_KEY
+        sync: false
+      - key: BREVO_SENDER_EMAIL
+        sync: false
+      - key: BREVO_SENDER_NAME
+        value: TrustVault

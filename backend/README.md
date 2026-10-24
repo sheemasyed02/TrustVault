@@ -6,7 +6,7 @@ FastAPI + Python 3.12. Deployed on **Render**; database on **Neon**; private fil
 
 - `GET /health` — liveness (no DB)
 - `GET /health/ready` — readiness (`SELECT 1`; no secrets in body)
-- Auth: `POST /auth/login`, `GET /users/me`, register/profile/password routes
+- Auth: `POST /auth/login`, `POST /auth/forgot-password`, `POST /auth/reset-password`, `GET /users/me`, register/profile/password routes
 - Documents: upload, list, detail, metadata, content, download (R2 stream), soft-delete
 - Permissions: grant / revoke / list
 - Admin: users, promotions, audit list, integrity verify
@@ -32,6 +32,14 @@ Required in `backend/.env` (or Render env):
 - `CORS_ORIGINS` including every browser origin (local + Vercel)
 
 Optional: `DIRECT_URL` (Neon direct host for Alembic), JWT issuer/audience/expiry.
+
+Password-reset email (required when sending forgot-password mail; never put these in the frontend):
+
+- `FRONTEND_BASE_URL` — exact browser origin of the Next.js app (no path), e.g. `http://localhost:3000` or `https://your-app.vercel.app`
+- `PASSWORD_RESET_TOKEN_EXPIRE_MINUTES` — default `30`
+- `BREVO_API_KEY` / `BREVO_SENDER_EMAIL` / `BREVO_SENDER_NAME` — Brevo transactional SMTP (verified sender)
+
+Controlled local verification (no secrets printed): `python scripts/verify_password_reset_flow.py` against a running API. Optional real inbox send: set `PASSWORD_RESET_VERIFY_INBOX`.
 
 ## Run API (local)
 
@@ -59,7 +67,7 @@ alembic current
 alembic upgrade head
 ```
 
-Current head: `c3d4e5f6a7b8`.
+Current head: `d4e5f6a7b8c9` (adds `password_reset_tokens`).
 
 If production was restored from pgAdmin and already matches this schema, inspect `alembic_version` before upgrading. Use `alembic stamp head` only when the schema already matches and the version table is missing/wrong — never drop/recreate the database.
 

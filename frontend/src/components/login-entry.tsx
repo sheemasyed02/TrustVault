@@ -25,7 +25,6 @@ export function LoginEntry() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [rememberMe, setRememberMe] = useState(false);
-  const [forgotHint, setForgotHint] = useState(false);
   const [validationError, setValidationError] = useState<string | null>(null);
   const [attempted, setAttempted] = useState(false);
   const passwordChanged = searchParams.get("passwordChanged") === "1";
@@ -54,7 +53,6 @@ export function LoginEntry() {
     event.preventDefault();
     clearError();
     setValidationError(null);
-    setForgotHint(false);
     setAttempted(true);
 
     const trimmedEmail = email.trim();
@@ -154,23 +152,13 @@ export function LoginEntry() {
             />
             Remember me
           </label>
-          <button
-            type="button"
+          <Link
+            href="/forgot-password"
             className="text-sm font-semibold text-accent-strong transition-colors duration-[180ms] hover:text-accent"
-            onClick={() => setForgotHint(true)}
           >
             Forgot password?
-          </button>
+          </Link>
         </div>
-
-        {forgotHint ? (
-          <p
-            role="status"
-            className="rounded-[0.625rem] border border-border bg-accent-soft/60 px-3 py-2 text-sm text-muted"
-          >
-            Ask a TrustVault administrator to reset your password.
-          </p>
-        ) : null}
 
         {displayError ? (
           <p

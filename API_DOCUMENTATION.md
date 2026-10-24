@@ -86,6 +86,57 @@ Password hashes are never returned.
 - The token does **not** authorize roles. The current role and active status are always loaded from PostgreSQL.
 - **Logout / revocation:** this API does not implement token revocation. A pure JWT access token remains valid until it expires unless a revocation store is added later. Do not claim that logout invalidates issued tokens until that exists.
 
+### `POST /auth/forgot-password`
+
+Request a single-use password-reset email via Brevo. Public response is identical whether or not an eligible account exists.
+
+**Request**
+
+```json
+{
+  "email": "user@example.com"
+}
+```
+
+**Response `200`** (always the same message for known and unknown emails):
+
+```json
+{
+  "message": "If an eligible account exists for that email, a password reset link will be sent."
+}
+```
+
+- Eligible means an **active** registered user. Inactive / unknown addresses do not create tokens and do not call Brevo.
+- No ADMIN exclusion policy is implemented (same as authenticated `POST /users/me/password`).
+- Rate-limited by hashed client IP and hashed email (process-local; suitable for single-instance Render).
+- `503` on Brevo/config failure uses a generic message that does not reveal account existence. Provider acceptance is not inbox delivery.
+
+### `POST /auth/reset-password`
+
+Set a new password with a raw reset token from the email link.
+
+**Request**
+
+```json
+{
+  "token": "<raw-token-from-email>",
+  "new_password": "new-password-99",
+  "confirm_password": "new-password-99"
+}
+```
+
+Password policy matches registration / self-service change: **10–128** characters; confirmation must match.
+
+**Response `200`**
+
+```json
+{
+  "message": "Password updated. Sign in with your new password. Previous access tokens may remain valid until they expire."
+}
+```
+
+Invalid, expired, or already-used tokens return `400` with a non-sensitive message. The token row is consumed with a conditional update / row lock so concurrent resets cannot both succeed. JWTs are not revoked server-side (stateless access tokens).
+
 ### `GET /users/me`
 
 Requires `Authorization: Bearer <access_token>`.
@@ -567,8 +618,8 @@ Broader suites remain under `backend/tests/test_document_*.py`, `test_audit_trai
 
 ## Planned (not implemented)
 
-- Token revocation / logout that invalidates issued JWTs
-- Application-layer login rate limiting / account lockout
+- Token revocation / logout that invalidates issued JWTs (password reset documents this limitation)
+- Application-layer **login** rate limiting / account lockout (forgot-password already has IP+email limits)
 - Automated retry worker for orphaned R2 objects after `STORAGE_DELETE_FAILED`
 - External audit-chain anchoring / WORM storage
 
