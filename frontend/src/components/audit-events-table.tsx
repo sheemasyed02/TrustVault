@@ -2,30 +2,13 @@
 
 import { Fragment, useState } from "react";
 
+import { OutcomeBadge } from "@/components/ui/badge";
 import type { AuditEventItem } from "@/lib/api";
 import { formatDateTime } from "@/lib/format";
 
 function truncate(value: string, max = 36): string {
   if (value.length <= max) return value;
-  return `${value.slice(0, max - 1)}…`;
-}
-
-function OutcomeBadge({ outcome }: { outcome: string }) {
-  const isSuccess = outcome === "SUCCESS";
-  const isDenied = outcome === "DENIED";
-  return (
-    <span
-      className={`inline-flex rounded-md px-2 py-0.5 text-xs font-semibold ${
-        isSuccess
-          ? "bg-accent-soft text-accent-strong"
-          : isDenied
-            ? "bg-danger/10 text-danger"
-            : "bg-muted/20 text-muted"
-      }`}
-    >
-      {isSuccess ? "Success" : isDenied ? "Denied" : outcome}
-    </span>
-  );
+  return `${value.slice(0, max - 1)}...`;
 }
 
 function PersonCell({
@@ -69,7 +52,7 @@ export function AuditEventsTable({
 
   if (events.length === 0) {
     return (
-      <div className="rounded-xl border border-dashed border-border bg-surface px-6 py-12 text-center">
+      <div className="rounded-[var(--radius)] border border-dashed border-border bg-accent-soft/40 px-6 py-12 text-center">
         <p className="font-medium text-foreground">{emptyMessage}</p>
         <p className="mt-2 text-sm text-muted">
           Adjust filters or wait for new security-relevant activity.
@@ -79,19 +62,19 @@ export function AuditEventsTable({
   }
 
   return (
-    <div className="overflow-hidden rounded-xl border border-border bg-surface shadow-[var(--shadow)]">
-      {/* Desktop table */}
+    <div className="overflow-hidden rounded-[var(--radius)] border border-border bg-surface shadow-[var(--shadow-sm)]">
       <div className="hidden overflow-x-auto lg:block">
-        <table className="min-w-full text-left text-sm">
-          <thead className="border-b border-border bg-accent-soft/30 text-xs uppercase tracking-wide text-muted">
+        <table className="tv-table min-w-full">
+          <thead>
             <tr>
-              <th className="px-4 py-3 font-semibold">When</th>
-              <th className="px-4 py-3 font-semibold">Action</th>
-              <th className="px-4 py-3 font-semibold">Outcome</th>
-              <th className="px-4 py-3 font-semibold">Actor</th>
-              <th className="px-4 py-3 font-semibold">Document</th>
-              <th className="px-4 py-3 font-semibold">Reason</th>
-              <th className="px-4 py-3 font-semibold">
+              <th>When</th>
+              <th>Action</th>
+              <th>Outcome</th>
+              <th>Actor</th>
+              <th>Target</th>
+              <th>Document</th>
+              <th>Reason</th>
+              <th>
                 <span className="sr-only">Details</span>
               </th>
             </tr>
@@ -100,10 +83,14 @@ export function AuditEventsTable({
             {events.map((event) => {
               const open = expandedId === event.id;
               const whenLabel = formatDateTime(event.created_at);
+              const target =
+                event.target_user_email ||
+                event.target_user_name ||
+                event.target_user_id;
               return (
                 <Fragment key={event.id}>
-                  <tr className="border-b border-border/70 align-top">
-                    <td className="px-4 py-3 whitespace-nowrap">
+                  <tr>
+                    <td className="whitespace-nowrap">
                       <time
                         dateTime={event.created_at}
                         title={event.created_at}
@@ -112,7 +99,7 @@ export function AuditEventsTable({
                         {whenLabel}
                       </time>
                     </td>
-                    <td className="px-4 py-3">
+                    <td>
                       <span className="font-medium text-foreground">
                         {event.action.replaceAll("_", " ")}
                       </span>
@@ -122,17 +109,29 @@ export function AuditEventsTable({
                         </span>
                       ) : null}
                     </td>
-                    <td className="px-4 py-3">
+                    <td>
                       <OutcomeBadge outcome={event.outcome} />
                     </td>
-                    <td className="px-4 py-3">
+                    <td>
                       <PersonCell
                         name={event.actor_name}
                         email={event.actor_email}
                         id={event.actor_id}
                       />
                     </td>
-                    <td className="px-4 py-3">
+                    <td>
+                      {target ? (
+                        <span
+                          className="block max-w-[10rem] truncate text-muted"
+                          title={String(target)}
+                        >
+                          {truncate(String(target), 28)}
+                        </span>
+                      ) : (
+                        <span className="text-muted">—</span>
+                      )}
+                    </td>
+                    <td>
                       {event.document_title || event.document_id ? (
                         <span className="block max-w-[14rem]">
                           <span
@@ -153,7 +152,7 @@ export function AuditEventsTable({
                         <span className="text-muted">—</span>
                       )}
                     </td>
-                    <td className="px-4 py-3">
+                    <td>
                       <span
                         className="block max-w-[10rem] truncate text-muted"
                         title={event.reason_code ?? undefined}
@@ -163,7 +162,7 @@ export function AuditEventsTable({
                           : "—"}
                       </span>
                     </td>
-                    <td className="px-4 py-3">
+                    <td>
                       <button
                         type="button"
                         onClick={() =>
@@ -177,8 +176,8 @@ export function AuditEventsTable({
                     </td>
                   </tr>
                   {open ? (
-                    <tr className="border-b border-border/70 bg-accent-soft/20">
-                      <td colSpan={7} className="px-4 py-4">
+                    <tr className="bg-accent-soft/30">
+                      <td colSpan={8} className="px-4 py-4">
                         <EventDetails event={event} />
                       </td>
                     </tr>
@@ -190,7 +189,6 @@ export function AuditEventsTable({
         </table>
       </div>
 
-      {/* Mobile cards */}
       <ul className="divide-y divide-border lg:hidden">
         {events.map((event) => {
           const open = expandedId === event.id;
@@ -243,14 +241,13 @@ export function AuditEventsTable({
           );
         })}
       </ul>
-
     </div>
   );
 }
 
 function EventDetails({ event }: { event: AuditEventItem }) {
   return (
-    <dl className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+    <dl className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
       <Detail label="Event ID" value={event.id} mono />
       <Detail label="UTC timestamp" value={event.created_at} mono />
       <Detail label="Request ID" value={event.request_id} mono />
@@ -288,10 +285,10 @@ function Detail({
   title?: string;
 }) {
   return (
-    <div>
+    <div className="rounded-[0.625rem] border border-border bg-surface px-3 py-2">
       <dt className="text-xs uppercase tracking-wide text-muted">{label}</dt>
       <dd
-        className={`mt-1 break-all text-foreground ${mono ? "font-mono text-xs" : ""}`}
+        className={`mt-1 break-all text-foreground ${mono ? "font-mono text-xs" : "text-sm"}`}
         title={title}
       >
         {value?.trim() ? value : "—"}

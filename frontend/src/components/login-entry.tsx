@@ -1,10 +1,13 @@
 "use client";
 
+import { LoaderCircle, Mail } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useId, useState, type FormEvent } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 
+import { AuthPasswordField } from "@/components/auth-password-field";
 import { useAuth } from "@/components/auth-provider";
+import { Button } from "@/components/ui/button";
 import { getPostLoginPath } from "@/lib/nav";
 
 export function LoginEntry() {
@@ -18,6 +21,7 @@ export function LoginEntry() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [validationError, setValidationError] = useState<string | null>(null);
+  const [attempted, setAttempted] = useState(false);
   const passwordChanged = searchParams.get("passwordChanged") === "1";
 
   const isSubmitting = status === "loading";
@@ -32,6 +36,7 @@ export function LoginEntry() {
     event.preventDefault();
     clearError();
     setValidationError(null);
+    setAttempted(true);
 
     const trimmedEmail = email.trim();
     if (!trimmedEmail || !password) {
@@ -43,101 +48,128 @@ export function LoginEntry() {
   }
 
   const displayError = validationError ?? errorMessage;
+  const emailInvalid = attempted && !email.trim();
+  const passwordInvalid = attempted && !password;
 
   return (
     <section
       aria-labelledby="sign-in-heading"
-      className="w-full max-w-md rounded-xl border border-border bg-surface p-6 shadow-[var(--shadow)] backdrop-blur md:p-8"
+      className="rounded-[var(--radius)] border border-border bg-surface p-6 shadow-[var(--shadow)] sm:p-8"
     >
-      <h2
+      <h1
         id="sign-in-heading"
-        className="font-display text-2xl tracking-tight text-foreground"
+        className="text-2xl font-semibold tracking-tight text-foreground"
       >
         Sign in
-      </h2>
+      </h1>
       <p className="mt-2 text-sm leading-6 text-muted">
-        Use your TrustVault account. Access tokens stay in memory for this
-        browser tab — refreshing the page requires signing in again. New here?{" "}
-        <Link href="/signup" className="font-semibold text-accent-strong underline">
-          Create a Viewer account
-        </Link>
-        .
+        Enter your work email and password to continue.
       </p>
 
       {passwordChanged ? (
         <p
           role="status"
-          className="mt-4 rounded-md border border-accent/30 bg-accent-soft/50 px-3 py-2 text-sm text-accent-strong"
+          className="mt-4 rounded-[0.625rem] border border-success/30 bg-[color-mix(in_srgb,var(--success)_10%,white)] px-3 py-2 text-sm text-success"
         >
           Password updated. Sign in with your new password.
         </p>
       ) : null}
 
       <form className="mt-6 space-y-4" onSubmit={onSubmit} noValidate>
-        <div className="space-y-2">
-          <label htmlFor={emailId} className="block text-sm font-medium">
+        <div>
+          <label htmlFor={emailId} className="tv-label">
             Work email
           </label>
-          <input
-            id={emailId}
-            name="email"
-            type="email"
-            autoComplete="username"
-            required
-            value={email}
-            disabled={isSubmitting}
-            onChange={(event) => {
-              setEmail(event.target.value);
-              if (validationError) setValidationError(null);
-              if (errorMessage) clearError();
-            }}
-            placeholder="you@company.com"
-            className="w-full rounded-md border border-border bg-white px-3 py-2 text-sm text-foreground outline-none ring-accent/40 placeholder:text-muted/80 focus-visible:ring-2 disabled:cursor-not-allowed disabled:opacity-70"
-          />
+          <div className="relative">
+            <Mail
+              className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted"
+              strokeWidth={1.75}
+              aria-hidden
+            />
+            <input
+              id={emailId}
+              name="email"
+              type="email"
+              autoComplete="username"
+              required
+              value={email}
+              disabled={isSubmitting}
+              aria-invalid={emailInvalid || undefined}
+              onChange={(event) => {
+                setEmail(event.target.value);
+                if (validationError) setValidationError(null);
+                if (errorMessage) clearError();
+              }}
+              placeholder="you@company.com"
+              className={`tv-input pl-9 ${
+                emailInvalid ? "border-danger focus:border-danger" : ""
+              }`}
+            />
+          </div>
         </div>
 
-        <div className="space-y-2">
-          <label htmlFor={passwordId} className="block text-sm font-medium">
-            Password
-          </label>
-          <input
-            id={passwordId}
-            name="password"
-            type="password"
-            autoComplete="current-password"
-            required
-            value={password}
-            disabled={isSubmitting}
-            onChange={(event) => {
-              setPassword(event.target.value);
-              if (validationError) setValidationError(null);
-              if (errorMessage) clearError();
-            }}
-            placeholder="••••••••"
-            className="w-full rounded-md border border-border bg-white px-3 py-2 text-sm text-foreground outline-none ring-accent/40 placeholder:text-muted/80 focus-visible:ring-2 disabled:cursor-not-allowed disabled:opacity-70"
-          />
-        </div>
+        <AuthPasswordField
+          id={passwordId}
+          label="Password"
+          name="password"
+          autoComplete="current-password"
+          required
+          value={password}
+          disabled={isSubmitting}
+          invalid={passwordInvalid}
+          placeholder="••••••••"
+          onChange={(event) => {
+            setPassword(event.target.value);
+            if (validationError) setValidationError(null);
+            if (errorMessage) clearError();
+          }}
+        />
 
         {displayError ? (
           <p
             id={errorId}
             role="alert"
-            className="rounded-md border border-danger/30 bg-danger/5 px-3 py-2 text-sm text-danger"
+            className="rounded-[0.625rem] border border-danger/30 bg-[color-mix(in_srgb,var(--danger)_8%,white)] px-3 py-2 text-sm text-danger"
           >
             {displayError}
           </p>
         ) : null}
 
-        <button
+        <Button
           type="submit"
+          variant="primary"
           disabled={isSubmitting}
           aria-busy={isSubmitting}
           aria-describedby={displayError ? errorId : undefined}
-          className="w-full rounded-md bg-accent px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-accent-strong focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent disabled:cursor-not-allowed disabled:opacity-70"
+          className="w-full"
         >
-          {isSubmitting ? "Signing in…" : "Sign in"}
-        </button>
+          {isSubmitting ? (
+            <>
+              <LoaderCircle
+                className="h-4 w-4 animate-spin"
+                strokeWidth={1.75}
+                aria-hidden
+              />
+              Signing in…
+            </>
+          ) : (
+            "Sign in"
+          )}
+        </Button>
       </form>
+
+      <p className="mt-5 text-center text-sm text-muted">
+        New here?{" "}
+        <Link
+          href="/signup"
+          className="font-semibold text-accent-strong underline decoration-accent/40 underline-offset-2 transition-colors duration-[180ms] hover:text-accent"
+        >
+          Create a Viewer account
+        </Link>
+      </p>
+      <p className="mt-3 text-center text-xs leading-5 text-muted">
+        Access tokens stay in this browser tab only. Refreshing signs you out.
+      </p>
     </section>
   );
 }

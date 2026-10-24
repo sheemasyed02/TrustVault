@@ -25,7 +25,7 @@ export function RequireAdmin({ children }: { children: ReactNode }) {
         role="alert"
         className="rounded-xl border border-danger/30 bg-danger/5 px-5 py-6 text-sm text-danger"
       >
-        <h1 className="font-display text-2xl text-foreground">Forbidden</h1>
+        <h1 className="font-semibold text-2xl text-foreground">Forbidden</h1>
         <p className="mt-2 text-muted">
           Administrator access is required for this page. Your role does not
           grant permission to manage users or inspect the audit trail.

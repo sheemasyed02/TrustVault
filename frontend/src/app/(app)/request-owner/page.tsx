@@ -1,8 +1,14 @@
 "use client";
 
-import { useCallback, useEffect, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useId, useState, type FormEvent } from "react";
 
 import { useAuth, useHandleUnauthorized } from "@/components/auth-provider";
+import { Alert } from "@/components/ui/alert";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { PageHeader, SectionHeading } from "@/components/ui/page-header";
+import { Panel } from "@/components/ui/panel";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
   ApiError,
   listMyPromotionRequests,
@@ -11,9 +17,18 @@ import {
 } from "@/lib/api";
 import { formatDateTime } from "@/lib/format";
 
+function StatusBadge({ status }: { status: string }) {
+  const upper = status.toUpperCase();
+  if (upper === "PENDING") return <Badge tone="warning">Pending</Badge>;
+  if (upper === "APPROVED") return <Badge tone="success">Approved</Badge>;
+  if (upper === "REJECTED") return <Badge tone="danger">Rejected</Badge>;
+  return <Badge tone="neutral">{status}</Badge>;
+}
+
 export default function RequestOwnerPage() {
   const { user, accessToken } = useAuth();
   const handleUnauthorized = useHandleUnauthorized();
+  const justificationId = useId();
   const [items, setItems] = useState<PromotionRequestItem[]>([]);
   const [justification, setJustification] = useState("");
   const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
@@ -73,11 +88,11 @@ export default function RequestOwnerPage() {
   if (user?.role !== "VIEWER") {
     return (
       <div className="space-y-3">
-        <h1 className="font-display text-3xl tracking-tight">Request owner access</h1>
-        <p className="text-sm text-muted">
+        <PageHeader title="Request owner access" />
+        <Alert tone="info">
           Only Viewer accounts can request promotion to Owner. Your current role
           is {user?.role ?? "unknown"}.
-        </p>
+        </Alert>
       </div>
     );
   }
@@ -86,63 +101,49 @@ export default function RequestOwnerPage() {
 
   return (
     <div className="space-y-5">
-      <header>
-        <h1 className="font-display text-3xl tracking-tight text-foreground">
-          Request owner access
-        </h1>
-        <p className="mt-2 max-w-2xl text-sm text-muted">
-          Approval grants Owner capabilities (upload and manage your own
-          documents) without removing access you already have to documents shared
-          with you.
-        </p>
-      </header>
+      <PageHeader
+        title="Request owner access"
+        description="Approval grants Owner capabilities (upload and manage your own documents) without removing access you already have to documents shared with you."
+      />
 
-      {message ? (
-        <p role="status" className="text-sm text-accent-strong">
-          {message}
-        </p>
-      ) : null}
-      {error ? (
-        <p role="alert" className="text-sm text-danger">
-          {error}
-        </p>
-      ) : null}
+      {message ? <Alert tone="success">{message}</Alert> : null}
+      {error ? <Alert tone="error">{error}</Alert> : null}
 
       {!hasPending ? (
-        <form
-          onSubmit={onSubmit}
-          className="max-w-xl space-y-4 rounded-xl border border-border bg-surface p-5 shadow-[var(--shadow)]"
-        >
-          <label className="block text-sm font-medium">
-            Justification (optional)
-            <textarea
-              value={justification}
-              onChange={(e) => setJustification(e.target.value)}
-              rows={4}
-              maxLength={2000}
-              disabled={busy}
-              className="mt-2 w-full rounded-md border border-border bg-white px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
-            />
-          </label>
-          <button
-            type="submit"
-            disabled={busy}
-            className="rounded-md bg-accent px-4 py-2 text-sm font-semibold text-white hover:bg-accent-strong disabled:opacity-60"
-          >
-            {busy ? "Submitting…" : "Submit request"}
-          </button>
-        </form>
+        <Panel className="max-w-xl">
+          <form onSubmit={onSubmit} className="space-y-4">
+            <label htmlFor={justificationId} className="block text-sm">
+              <span className="tv-label">Justification (optional)</span>
+              <textarea
+                id={justificationId}
+                value={justification}
+                onChange={(e) => setJustification(e.target.value)}
+                rows={4}
+                maxLength={2000}
+                disabled={busy}
+                className="tv-input min-h-[6rem] resize-y"
+              />
+            </label>
+            <Button type="submit" variant="primary" disabled={busy}>
+              {busy ? "Submitting..." : "Submit request"}
+            </Button>
+          </form>
+        </Panel>
       ) : (
-        <div className="rounded-xl border border-border bg-accent-soft/40 px-4 py-3 text-sm text-foreground">
+        <Alert tone="info">
           You already have a pending request. Wait for an administrator to
-          approve or reject it — the submit button stays disabled until then.
-        </div>
+          approve or reject it — the submit form stays unavailable until then.
+        </Alert>
       )}
 
-      <section className="rounded-xl border border-border bg-surface p-5 shadow-[var(--shadow)]">
-        <h2 className="font-display text-xl text-foreground">Your requests</h2>
+      <Panel>
+        <SectionHeading title="Your requests" />
         {status === "loading" ? (
-          <p className="mt-3 text-sm text-muted">Loading…</p>
+          <div className="mt-3 space-y-2" role="status" aria-busy>
+            <Skeleton className="h-16 w-full" />
+            <Skeleton className="h-16 w-full" />
+            <span className="sr-only">Loading...</span>
+          </div>
         ) : null}
         {status === "ready" && items.length === 0 ? (
           <p className="mt-3 text-sm text-muted">No requests yet.</p>
@@ -152,23 +153,27 @@ export default function RequestOwnerPage() {
             {items.map((item) => (
               <li
                 key={item.id}
-                className="rounded-md border border-border px-3 py-3"
+                className="rounded-[0.75rem] border border-border px-3 py-3"
               >
-                <p className="font-semibold">{item.status}</p>
-                <p className="text-muted">
-                  Submitted {formatDateTime(item.created_at)}
-                </p>
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <StatusBadge status={item.status} />
+                  <p className="text-xs text-muted">
+                    Submitted {formatDateTime(item.created_at)}
+                  </p>
+                </div>
                 {item.justification ? (
-                  <p className="mt-1">{item.justification}</p>
+                  <p className="mt-2 text-foreground">{item.justification}</p>
                 ) : null}
                 {item.admin_note ? (
-                  <p className="mt-1 text-muted">Admin note: {item.admin_note}</p>
+                  <p className="mt-1 text-muted">
+                    Admin note: {item.admin_note}
+                  </p>
                 ) : null}
               </li>
             ))}
           </ul>
         ) : null}
-      </section>
+      </Panel>
     </div>
   );
 }

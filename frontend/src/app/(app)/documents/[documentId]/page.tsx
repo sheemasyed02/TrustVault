@@ -1,5 +1,11 @@
 "use client";
 
+import {
+  ArrowLeft,
+  Download,
+  LoaderCircle,
+  Trash2,
+} from "lucide-react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
@@ -10,11 +16,12 @@ import { DocumentAuditPanel } from "@/components/document-audit-panel";
 import { DocumentMetadataForm } from "@/components/document-metadata-form";
 import { DocumentPermissionsPanel } from "@/components/document-permissions-panel";
 import { DocumentPreview } from "@/components/document-preview";
+import { FileTypeIcon } from "@/components/file-type-icon";
 import { Alert } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { PageHeader } from "@/components/ui/page-header";
 import { Panel } from "@/components/ui/panel";
+import { Skeleton } from "@/components/ui/skeleton";
 import { useDocumentActions } from "@/hooks/use-document-actions";
 import {
   ApiError,
@@ -109,15 +116,30 @@ export default function DocumentDetailPage() {
     <div className="space-y-5">
       <Link
         href={backHref}
-        className="text-sm font-semibold text-accent-strong hover:underline"
+        className="inline-flex items-center gap-1.5 text-sm font-semibold text-accent-strong hover:underline"
       >
-        ← Back
+        <ArrowLeft className="h-3.5 w-3.5" strokeWidth={1.75} aria-hidden />
+        Back
       </Link>
 
       {status === "loading" ? (
-        <p className="text-sm text-muted" role="status">
-          Loading document…
-        </p>
+        <div role="status" aria-busy="true">
+          <Panel className="space-y-4">
+            <div className="flex items-start gap-3">
+              <Skeleton className="h-12 w-12 rounded-xl" />
+              <div className="min-w-0 flex-1 space-y-2">
+                <Skeleton className="h-7 w-2/3" />
+                <Skeleton className="h-4 w-1/3" />
+              </div>
+            </div>
+            <div className="grid gap-3 sm:grid-cols-3">
+              <Skeleton className="h-16 w-full rounded-[0.75rem]" />
+              <Skeleton className="h-16 w-full rounded-[0.75rem]" />
+              <Skeleton className="h-16 w-full rounded-[0.75rem]" />
+            </div>
+            <span className="sr-only">Loading document…</span>
+          </Panel>
+        </div>
       ) : null}
 
       {status === "error" ? (
@@ -134,30 +156,40 @@ export default function DocumentDetailPage() {
       {status === "ready" && doc && access ? (
         <>
           <Panel>
-            <PageHeader
-              title={doc.title}
-              description={
-                access.isOwner
-                  ? null
-                  : `Shared by ${doc.owner.name}`
-              }
-              actions={
-                <Badge
-                  tone={
-                    access.yourAccess === "EDIT" || access.isOwner
-                      ? "accent"
-                      : "neutral"
-                  }
-                >
-                  {formatDocumentAccessLabel(access.yourAccess)}
-                </Badge>
-              }
-            />
+            <div className="flex flex-wrap items-start justify-between gap-4">
+              <div className="flex min-w-0 items-start gap-3">
+                <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-accent-soft text-accent-strong">
+                  <FileTypeIcon mime={doc.mime_type} className="h-6 w-6" />
+                </span>
+                <div className="min-w-0">
+                  <h1 className="text-2xl font-semibold tracking-tight text-foreground">
+                    {doc.title}
+                  </h1>
+                  <p className="mt-1 text-sm text-muted">
+                    {access.isOwner
+                      ? "You own this document"
+                      : `Shared by ${doc.owner.name}`}
+                    {" · "}
+                    {mimeLabel(doc.mime_type)}
+                    {" · "}
+                    {formatBytes(doc.file_size)}
+                  </p>
+                </div>
+              </div>
+              <Badge
+                tone={
+                  access.yourAccess === "EDIT" || access.isOwner
+                    ? "accent"
+                    : "neutral"
+                }
+              >
+                {formatDocumentAccessLabel(access.yourAccess)}
+              </Badge>
+            </div>
 
             <dl className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
               <Detail label="Category" value={doc.category} />
-              <Detail label="Type" value={mimeLabel(doc.mime_type)} />
-              <Detail label="Size" value={formatBytes(doc.file_size)} />
+              <Detail label="Created" value={formatDateTime(doc.created_at)} />
               <Detail label="Updated" value={formatDateTime(doc.updated_at)} />
               <Detail
                 label="Owner"
@@ -176,30 +208,45 @@ export default function DocumentDetailPage() {
                 variant="primary"
                 onClick={() => void actions.download(doc)}
                 disabled={actions.downloadingId === doc.id}
+                aria-busy={actions.downloadingId === doc.id}
               >
-                {actions.downloadingId === doc.id
-                  ? "Downloading…"
-                  : "Download PDF"}
+                {actions.downloadingId === doc.id ? (
+                  <>
+                    <LoaderCircle
+                      className="h-4 w-4 animate-spin"
+                      strokeWidth={1.75}
+                      aria-hidden
+                    />
+                    Downloading…
+                  </>
+                ) : (
+                  <>
+                    <Download className="h-4 w-4" strokeWidth={1.75} aria-hidden />
+                    Download PDF
+                  </>
+                )}
               </Button>
               {access.canDelete ? (
                 <Button
                   variant="danger"
                   onClick={() => actions.requestDelete(doc)}
+                  disabled={actions.deleting || actions.downloadingId === doc.id}
                 >
+                  <Trash2 className="h-4 w-4" strokeWidth={1.75} aria-hidden />
                   Delete
                 </Button>
               ) : null}
             </div>
 
             {actions.actionError ? (
-              <p role="alert" className="mt-3 text-sm text-danger">
-                {actions.actionError}
-              </p>
+              <div className="mt-3">
+                <Alert tone="error">{actions.actionError}</Alert>
+              </div>
             ) : null}
             {actions.actionMessage ? (
-              <p role="status" className="mt-3 text-sm text-accent-strong">
-                {actions.actionMessage}
-              </p>
+              <div className="mt-3">
+                <Alert tone="success">{actions.actionMessage}</Alert>
+              </div>
             ) : null}
           </Panel>
 
@@ -245,8 +292,10 @@ export default function DocumentDetailPage() {
 
 function Detail({ label, value }: { label: string; value: string }) {
   return (
-    <div>
-      <dt className="text-xs uppercase tracking-wide text-muted">{label}</dt>
+    <div className="rounded-[0.75rem] border border-border bg-accent-soft/30 px-3 py-2.5">
+      <dt className="text-xs font-semibold uppercase tracking-wide text-muted">
+        {label}
+      </dt>
       <dd className="mt-1 break-words text-sm text-foreground">{value}</dd>
     </div>
   );

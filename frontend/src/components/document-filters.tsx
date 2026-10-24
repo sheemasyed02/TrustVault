@@ -1,6 +1,9 @@
 "use client";
 
+import { Search, X } from "lucide-react";
 import { useEffect, useState } from "react";
+
+import { Button } from "@/components/ui/button";
 
 export interface DocumentFilterValues {
   title: string;
@@ -56,18 +59,25 @@ export function DocumentFilters({
   return (
     <section
       aria-label="Search and filters"
-      className="rounded-xl border border-border bg-surface p-4 shadow-[var(--shadow-sm)]"
+      className="rounded-[var(--radius)] border border-border bg-surface p-4 shadow-[var(--shadow-sm)] sm:p-5"
     >
       <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
         <label className="block text-sm">
           <span className="tv-label">Title search</span>
-          <input
-            type="search"
-            value={titleInput}
-            onChange={(event) => setTitleInput(event.target.value)}
-            placeholder="Search titles"
-            className="tv-input"
-          />
+          <span className="relative block">
+            <Search
+              className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted"
+              strokeWidth={1.75}
+              aria-hidden
+            />
+            <input
+              type="search"
+              value={titleInput}
+              onChange={(event) => setTitleInput(event.target.value)}
+              placeholder="Search titles"
+              className="tv-input pl-9"
+            />
+          </span>
         </label>
         <label className="block text-sm">
           <span className="tv-label">Category</span>
@@ -126,9 +136,12 @@ export function DocumentFilters({
         ) : (
           <p className="text-xs text-muted">No filters active</p>
         )}
-        <button
+        <Button
           type="button"
+          size="sm"
+          variant="secondary"
           disabled={!hasActive}
+          className="ml-auto"
           onClick={() => {
             setTitleInput("");
             setTitleFromProps("");
@@ -140,10 +153,10 @@ export function DocumentFilters({
               createdTo: "",
             });
           }}
-          className="ml-auto rounded-md border border-border px-3 py-1.5 text-xs font-semibold disabled:opacity-50"
         >
+          <X className="h-3.5 w-3.5" strokeWidth={1.75} aria-hidden />
           Clear filters
-        </button>
+        </Button>
       </div>
     </section>
   );

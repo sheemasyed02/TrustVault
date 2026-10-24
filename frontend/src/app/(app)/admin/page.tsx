@@ -1,14 +1,23 @@
 "use client";
 
+import {
+  FileWarning,
+  RefreshCw,
+  ScrollText,
+  ShieldCheck,
+  UserCog,
+  Users,
+} from "lucide-react";
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 
 import { useAuth, useHandleUnauthorized } from "@/components/auth-provider";
 import { Alert } from "@/components/ui/alert";
-import { Button } from "@/components/ui/button";
 import { OutcomeBadge } from "@/components/ui/badge";
-import { PageHeader } from "@/components/ui/page-header";
-import { Panel } from "@/components/ui/panel";
+import { Button, buttonClassName } from "@/components/ui/button";
+import { PageHeader, SectionHeading } from "@/components/ui/page-header";
+import { Panel, StatCard } from "@/components/ui/panel";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
   ApiError,
   getAdminSummaryRequest,
@@ -17,6 +26,33 @@ import {
   type AuditEventItem,
 } from "@/lib/api";
 import { formatDateTime } from "@/lib/format";
+
+const shortcuts = [
+  {
+    href: "/admin/users",
+    label: "Manage users",
+    hint: "Search accounts and status",
+    icon: Users,
+  },
+  {
+    href: "/admin/promotions",
+    label: "Owner requests",
+    hint: "Review Viewer promotions",
+    icon: UserCog,
+  },
+  {
+    href: "/admin/audit",
+    label: "Audit logs",
+    hint: "Security event history",
+    icon: ScrollText,
+  },
+  {
+    href: "/admin/audit/integrity",
+    label: "Audit integrity",
+    hint: "Verify hash-chain checks",
+    icon: ShieldCheck,
+  },
+] as const;
 
 export default function AdminDashboardPage() {
   const { accessToken } = useAuth();
@@ -69,47 +105,51 @@ export default function AdminDashboardPage() {
   return (
     <div className="space-y-6">
       <PageHeader
-        eyebrow="Administration"
         title="Admin dashboard"
-        description="User and audit totals from the live API. Opening documents still requires ownership or an explicit grant."
+        description="Live user and audit totals. Document contents still require ownership or an explicit grant."
         actions={
           <Button variant="secondary" onClick={() => void load()}>
+            <RefreshCw className="h-3.5 w-3.5" strokeWidth={1.75} aria-hidden />
             Refresh
           </Button>
         }
       />
 
-      <nav className="flex flex-wrap gap-x-4 gap-y-2 text-sm" aria-label="Admin shortcuts">
-        <Link
-          href="/admin/users"
-          className="font-semibold text-accent-strong hover:underline"
-        >
-          Manage Users
-        </Link>
-        <Link
-          href="/admin/audit"
-          className="font-semibold text-accent-strong hover:underline"
-        >
-          Audit Logs
-        </Link>
-        <Link
-          href="/admin/audit/integrity"
-          className="font-semibold text-accent-strong hover:underline"
-        >
-          Audit Integrity
-        </Link>
-        <Link
-          href="/profile"
-          className="font-semibold text-accent-strong hover:underline"
-        >
-          Profile
-        </Link>
+      <nav
+        className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4"
+        aria-label="Admin shortcuts"
+      >
+        {shortcuts.map((item) => {
+          const Icon = item.icon;
+          return (
+            <Link
+              key={item.href}
+              href={item.href}
+              className="rounded-[var(--radius)] border border-border bg-surface p-4 shadow-[var(--shadow-sm)] transition-shadow duration-[180ms] hover:border-accent/40 hover:shadow-[var(--shadow)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+            >
+              <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-accent-soft text-accent-strong">
+                <Icon className="h-4 w-4" strokeWidth={1.75} aria-hidden />
+              </span>
+              <p className="mt-3 text-sm font-semibold text-foreground">
+                {item.label}
+              </p>
+              <p className="mt-0.5 text-xs text-muted">{item.hint}</p>
+            </Link>
+          );
+        })}
       </nav>
 
       {status === "loading" ? (
-        <p className="text-sm text-muted" role="status">
-          Loading summary…
-        </p>
+        <section
+          className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3"
+          aria-busy
+          role="status"
+        >
+          {Array.from({ length: 5 }).map((_, index) => (
+            <Skeleton key={index} className="h-24 w-full rounded-[var(--radius)]" />
+          ))}
+          <span className="sr-only">Loading summary…</span>
+        </section>
       ) : null}
 
       {status === "error" ? (
@@ -127,32 +167,46 @@ export default function AdminDashboardPage() {
 
       {status === "ready" && summary ? (
         <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          <Stat label="Users" value={String(summary.users_total)} />
-          <Stat label="Active" value={String(summary.users_active)} />
-          <Stat label="Inactive" value={String(summary.users_inactive)} />
-          <Stat
+          <StatCard
+            label="Users"
+            value={String(summary.users_total)}
+            icon={<Users className="h-4 w-4" strokeWidth={1.75} />}
+          />
+          <StatCard label="Active" value={String(summary.users_active)} />
+          <StatCard label="Inactive" value={String(summary.users_inactive)} />
+          <StatCard
             label="Audit successes"
             value={String(summary.audit_success_total)}
+            icon={<ShieldCheck className="h-4 w-4" strokeWidth={1.75} />}
           />
-          <Stat
+          <StatCard
             label="Audit denials"
             value={String(summary.audit_denied_total)}
+            icon={<FileWarning className="h-4 w-4" strokeWidth={1.75} />}
           />
         </section>
       ) : null}
 
       <Panel>
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <h2 className="font-display text-xl text-foreground">
-            Recent audit events
-          </h2>
-          <Link
-            href="/admin/audit"
-            className="text-sm font-semibold text-accent-strong hover:underline"
-          >
-            View all logs
-          </Link>
-        </div>
+        <SectionHeading
+          title="Recent audit events"
+          actions={
+            <Link
+              href="/admin/audit"
+              className={buttonClassName({ variant: "ghost", size: "sm" })}
+            >
+              <ScrollText className="h-3.5 w-3.5" strokeWidth={1.75} aria-hidden />
+              View all logs
+            </Link>
+          }
+        />
+        {status === "loading" ? (
+          <div className="mt-4 space-y-2" aria-hidden>
+            <Skeleton className="h-12 w-full" />
+            <Skeleton className="h-12 w-full" />
+            <Skeleton className="h-12 w-[70%]" />
+          </div>
+        ) : null}
         {status === "ready" && recent.length === 0 ? (
           <p className="mt-3 text-sm text-muted" role="status">
             No audit events yet.
@@ -166,7 +220,9 @@ export default function AdminDashboardPage() {
                 className="flex flex-wrap items-baseline justify-between gap-2 py-3 text-sm"
               >
                 <div className="min-w-0">
-                  <p className="font-semibold text-foreground">{event.action}</p>
+                  <p className="font-semibold text-foreground">
+                    {event.action.replaceAll("_", " ")}
+                  </p>
                   <p className="text-xs text-muted">
                     {formatDateTime(event.created_at)}
                     {event.reason_code ? ` · ${event.reason_code}` : ""}
@@ -179,14 +235,5 @@ export default function AdminDashboardPage() {
         ) : null}
       </Panel>
     </div>
-  );
-}
-
-function Stat({ label, value }: { label: string; value: string }) {
-  return (
-    <Panel className="!p-4">
-      <p className="text-xs uppercase tracking-wide text-muted">{label}</p>
-      <p className="mt-2 font-display text-3xl text-foreground">{value}</p>
-    </Panel>
   );
 }

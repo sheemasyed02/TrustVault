@@ -1,9 +1,12 @@
 "use client";
 
-import { useCallback, useEffect, useState, type FormEvent } from "react";
+import { LoaderCircle, Share2, Shield } from "lucide-react";
+import { useCallback, useEffect, useId, useState, type FormEvent } from "react";
 
 import { useAuth, useHandleUnauthorized } from "@/components/auth-provider";
 import { ConfirmDialog } from "@/components/confirm-dialog";
+import { Alert } from "@/components/ui/alert";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { UserSearchPicker } from "@/components/user-search-picker";
 import {
@@ -32,6 +35,7 @@ export function DocumentPermissionsPanel({
 }: DocumentPermissionsPanelProps) {
   const { accessToken } = useAuth();
   const handleUnauthorized = useHandleUnauthorized();
+  const permissionId = useId();
 
   const [grants, setGrants] = useState<PermissionGrant[]>([]);
   const [status, setStatus] = useState<"idle" | "loading" | "ready" | "error">(
@@ -191,22 +195,47 @@ export function DocumentPermissionsPanel({
   return (
     <section
       aria-label="Permission management"
-      className="rounded-xl border border-border bg-surface p-5 shadow-[var(--shadow)]"
+      className="rounded-[var(--radius)] border border-border bg-surface p-5 shadow-[var(--shadow-sm)] sm:p-6"
     >
-      <h2 className="font-display text-xl text-foreground">Sharing</h2>
-      <p className="mt-1 text-sm text-muted">
-        <strong className="font-semibold text-foreground">READ</strong> allows
-        preview and download.{" "}
-        <strong className="font-semibold text-foreground">EDIT</strong> also
-        allows supported content editing (DOCX text). Metadata, delete, and
-        sharing stay owner-only. Grants never change platform roles. Revocation
-        blocks the next server request; copies already downloaded locally are
-        outside TrustVault control.
-      </p>
+      <div className="flex items-start gap-3">
+        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-accent-soft text-accent-strong">
+          <Share2 className="h-5 w-5" strokeWidth={1.75} aria-hidden />
+        </span>
+        <div className="min-w-0">
+          <h2 className="text-lg font-semibold tracking-tight text-foreground">
+            Sharing
+          </h2>
+          <p className="mt-1 text-sm text-muted">
+            Grant access to registered users. Metadata, delete, and sharing stay
+            owner-only.
+          </p>
+        </div>
+      </div>
+
+      <div className="mt-4 grid gap-3 sm:grid-cols-2">
+        <div className="rounded-[0.75rem] border border-border bg-accent-soft/40 px-3 py-3">
+          <p className="inline-flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-accent-strong">
+            <Shield className="h-3.5 w-3.5" strokeWidth={1.75} aria-hidden />
+            READ
+          </p>
+          <p className="mt-1 text-sm text-muted">
+            Preview and download PDF through the TrustVault API.
+          </p>
+        </div>
+        <div className="rounded-[0.75rem] border border-border bg-accent-soft/40 px-3 py-3">
+          <p className="inline-flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-accent-strong">
+            <Shield className="h-3.5 w-3.5" strokeWidth={1.75} aria-hidden />
+            EDIT
+          </p>
+          <p className="mt-1 text-sm text-muted">
+            Everything in READ, plus DOCX body editing when supported.
+          </p>
+        </div>
+      </div>
 
       <form
         onSubmit={(event) => void onGrant(event)}
-        className="mt-4 space-y-3"
+        className="mt-5 space-y-3"
       >
         <UserSearchPicker
           selected={selectedUser}
@@ -215,9 +244,12 @@ export function DocumentPermissionsPanel({
           excludeUserIds={ownerUserId ? [ownerUserId] : []}
         />
         <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
-          <label className="block min-w-0 flex-1 text-sm sm:max-w-[12rem]">
-            <span className="mb-1 block font-medium">Permission</span>
+          <div className="block min-w-0 flex-1 sm:max-w-[12rem]">
+            <label htmlFor={permissionId} className="tv-label">
+              Permission
+            </label>
             <select
+              id={permissionId}
               value={permission}
               onChange={(event) =>
                 setPermission(event.target.value as DocumentPermissionLevel)
@@ -228,7 +260,7 @@ export function DocumentPermissionsPanel({
               <option value="READ">READ</option>
               <option value="EDIT">EDIT</option>
             </select>
-          </label>
+          </div>
           <Button
             type="submit"
             variant="primary"
@@ -240,20 +272,27 @@ export function DocumentPermissionsPanel({
             }
             className="w-full sm:w-auto"
           >
-            {granting ? "Granting…" : "Grant access"}
+            {granting ? (
+              <>
+                <LoaderCircle
+                  className="h-4 w-4 animate-spin"
+                  strokeWidth={1.75}
+                  aria-hidden
+                />
+                Granting…
+              </>
+            ) : (
+              "Grant access"
+            )}
           </Button>
         </div>
       </form>
 
-      {error ? (
-        <p role="alert" className="mt-3 text-sm text-danger">
-          {error}
-        </p>
-      ) : null}
+      {error ? <div className="mt-3"><Alert tone="error">{error}</Alert></div> : null}
       {message ? (
-        <p role="status" className="mt-3 text-sm text-accent-strong">
-          {message}
-        </p>
+        <div className="mt-3">
+          <Alert tone="success">{message}</Alert>
+        </div>
       ) : null}
 
       {status === "loading" ? (
@@ -263,13 +302,11 @@ export function DocumentPermissionsPanel({
       ) : null}
 
       {status === "error" ? (
-        <button
-          type="button"
-          onClick={() => void loadGrants()}
-          className="mt-4 text-sm font-semibold text-danger underline"
-        >
-          Retry loading grants
-        </button>
+        <div className="mt-4">
+          <Button size="sm" variant="secondary" onClick={() => void loadGrants()}>
+            Retry loading grants
+          </Button>
+        </div>
       ) : null}
 
       {status === "ready" && grants.length === 0 ? (
@@ -279,7 +316,7 @@ export function DocumentPermissionsPanel({
       ) : null}
 
       {status === "ready" && grants.length > 0 ? (
-        <ul className="mt-4 divide-y divide-border rounded-lg border border-border">
+        <ul className="mt-4 divide-y divide-border overflow-hidden rounded-[0.75rem] border border-border">
           {grants.map((grant) => {
             const nextLevel: DocumentPermissionLevel =
               grant.permission === "READ" ? "EDIT" : "READ";
@@ -287,22 +324,18 @@ export function DocumentPermissionsPanel({
             return (
               <li
                 key={grant.id}
-                className="flex flex-wrap items-center justify-between gap-3 px-3 py-3 text-sm"
+                className="flex flex-wrap items-center justify-between gap-3 bg-surface px-3 py-3 text-sm"
               >
-                <div>
-                  <p className="font-medium text-foreground">
-                    {grant.user.name}{" "}
-                    <span
-                      className={`ml-2 rounded px-1.5 py-0.5 text-xs font-semibold ${
-                        grant.permission === "EDIT"
-                          ? "bg-accent-soft text-accent-strong"
-                          : "bg-white text-muted"
-                      }`}
+                <div className="min-w-0">
+                  <p className="flex flex-wrap items-center gap-2 font-medium text-foreground">
+                    <span className="truncate">{grant.user.name}</span>
+                    <Badge
+                      tone={grant.permission === "EDIT" ? "accent" : "neutral"}
                     >
                       {grant.permission}
-                    </span>
+                    </Badge>
                   </p>
-                  <p className="text-xs text-muted">
+                  <p className="mt-0.5 text-xs text-muted">
                     {grant.user.email} · since {formatDateTime(grant.granted_at)}
                     {grant.regranted ? " · regranted" : ""}
                   </p>
@@ -312,7 +345,7 @@ export function DocumentPermissionsPanel({
                     type="button"
                     size="sm"
                     variant="secondary"
-                    disabled={changing || revoking}
+                    disabled={changing || revoking || granting}
                     onClick={() => void changePermission(grant, nextLevel)}
                   >
                     {changing ? "Updating…" : `Change to ${nextLevel}`}
@@ -321,7 +354,7 @@ export function DocumentPermissionsPanel({
                     type="button"
                     size="sm"
                     variant="danger"
-                    disabled={changing || revoking}
+                    disabled={changing || revoking || granting}
                     onClick={() => setRevokeTarget(grant)}
                   >
                     Revoke

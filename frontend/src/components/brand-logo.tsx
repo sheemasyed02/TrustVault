@@ -29,7 +29,7 @@ export function BrandLogo({
 
   return (
     <Image
-      src="/trust.png"
+      src="/logo.png"
       alt={decorative ? "" : "TrustVault"}
       width={px}
       height={px}

@@ -106,7 +106,7 @@ export function DocumentAuditPanel({ documentId }: DocumentAuditPanelProps) {
     >
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h2 className="font-display text-xl text-foreground">
+          <h2 className="font-semibold text-xl text-foreground">
             Document activity
           </h2>
           <p className="mt-1 text-sm text-muted">
@@ -155,7 +155,7 @@ export function DocumentAuditPanel({ documentId }: DocumentAuditPanelProps) {
             <dt className="text-xs uppercase tracking-wide text-muted">
               External views
             </dt>
-            <dd className="mt-1 font-display text-2xl text-foreground">
+            <dd className="mt-1 font-semibold text-2xl text-foreground">
               {summary.external_views ?? 0}
             </dd>
           </div>
@@ -163,7 +163,7 @@ export function DocumentAuditPanel({ documentId }: DocumentAuditPanelProps) {
             <dt className="text-xs uppercase tracking-wide text-muted">
               Distinct external viewers
             </dt>
-            <dd className="mt-1 font-display text-2xl text-foreground">
+            <dd className="mt-1 font-semibold text-2xl text-foreground">
               {summary.distinct_external_viewers ?? 0}
             </dd>
           </div>
@@ -171,7 +171,7 @@ export function DocumentAuditPanel({ documentId }: DocumentAuditPanelProps) {
             <dt className="text-xs uppercase tracking-wide text-muted">
               My views (trail)
             </dt>
-            <dd className="mt-1 font-display text-2xl text-foreground">
+            <dd className="mt-1 font-semibold text-2xl text-foreground">
               {summary.owner_self_views ?? 0}
             </dd>
           </div>
@@ -179,7 +179,7 @@ export function DocumentAuditPanel({ documentId }: DocumentAuditPanelProps) {
             <dt className="text-xs uppercase tracking-wide text-muted">
               Downloads
             </dt>
-            <dd className="mt-1 font-display text-2xl text-foreground">
+            <dd className="mt-1 font-semibold text-2xl text-foreground">
               {summary.successful_downloads}
             </dd>
           </div>

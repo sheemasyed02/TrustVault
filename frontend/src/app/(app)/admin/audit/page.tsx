@@ -1,10 +1,16 @@
 "use client";
 
+import { RefreshCw, ScrollText } from "lucide-react";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
 
 import { useAuth, useHandleUnauthorized } from "@/components/auth-provider";
 import { AuditEventsTable } from "@/components/audit-events-table";
+import { Alert } from "@/components/ui/alert";
+import { Button } from "@/components/ui/button";
+import { PageHeader } from "@/components/ui/page-header";
+import { StatCard } from "@/components/ui/panel";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
   ApiError,
   listAuditEventsRequest,
@@ -98,8 +104,7 @@ export default function AdminAuditLogsPage() {
   const pageMetrics = useMemo(() => {
     const success = events.filter((e) => e.outcome === "SUCCESS").length;
     const denied = events.filter((e) => e.outcome === "DENIED").length;
-    const views = events.filter((e) => e.action === "DOCUMENT_VIEW").length;
-    return { success, denied, views, shown: events.length };
+    return { success, denied, shown: events.length };
   }, [events]);
 
   function onApplyFilters(event: FormEvent) {
@@ -116,17 +121,12 @@ export default function AdminAuditLogsPage() {
         ← Admin dashboard
       </Link>
 
-      <header className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <p className="text-sm font-semibold uppercase tracking-[0.18em] text-accent-strong">
-            Administration
-          </p>
-          <h1 className="mt-2 font-display text-2xl tracking-tight text-foreground sm:text-3xl">
-            Audit logs
-          </h1>
-          <p className="mt-2 max-w-xl text-sm text-muted">
-            Persisted security events across the platform. Timestamps use your
-            local timezone. For hash-chain checks, open{" "}
+      <PageHeader
+        title="Audit logs"
+        description={
+          <>
+            Persisted security events. Timestamps use your local timezone. For
+            hash-chain checks, open{" "}
             <Link
               href="/admin/audit/integrity"
               className="font-semibold text-accent-strong underline"
@@ -134,29 +134,32 @@ export default function AdminAuditLogsPage() {
               Audit Integrity
             </Link>
             .
-          </p>
-        </div>
-        <button
-          type="button"
-          onClick={() => void load(page, applied)}
-          className="rounded-md border border-border px-3 py-2 text-sm font-semibold hover:bg-accent-soft"
-        >
-          Refresh
-        </button>
-      </header>
+          </>
+        }
+        actions={
+          <Button
+            type="button"
+            variant="secondary"
+            onClick={() => void load(page, applied)}
+          >
+            <RefreshCw className="h-3.5 w-3.5" strokeWidth={1.75} aria-hidden />
+            Refresh
+          </Button>
+        }
+      />
 
       {status === "ready" ? (
         <dl className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          <Metric label="Matching events" value={String(total)} />
-          <Metric label="On this page" value={String(pageMetrics.shown)} />
-          <Metric label="Success (page)" value={String(pageMetrics.success)} />
-          <Metric label="Denied (page)" value={String(pageMetrics.denied)} />
+          <StatCard label="Matching events" value={String(total)} />
+          <StatCard label="On this page" value={String(pageMetrics.shown)} />
+          <StatCard label="Success (page)" value={String(pageMetrics.success)} />
+          <StatCard label="Denied (page)" value={String(pageMetrics.denied)} />
         </dl>
       ) : null}
 
       <form
         onSubmit={onApplyFilters}
-        className="grid gap-3 rounded-xl border border-border bg-surface p-4 shadow-[var(--shadow)] sm:grid-cols-2 lg:grid-cols-3"
+        className="grid gap-3 rounded-[var(--radius)] border border-border bg-surface p-4 shadow-[var(--shadow-sm)] sm:grid-cols-2 lg:grid-cols-3 sm:p-5"
       >
         <Field
           label="Actor ID"
@@ -183,9 +186,7 @@ export default function AdminAuditLogsPage() {
           placeholder="Document owner UUID"
         />
         <label className="text-sm">
-          <span className="text-xs uppercase tracking-wide text-muted">
-            Outcome
-          </span>
+          <span className="tv-label">Outcome</span>
           <select
             value={filters.outcome}
             onChange={(e) =>
@@ -194,7 +195,7 @@ export default function AdminAuditLogsPage() {
                 outcome: e.target.value as FilterState["outcome"],
               }))
             }
-            className="mt-1 w-full rounded-md border border-border bg-white px-3 py-2"
+            className="tv-input"
           >
             <option value="">Any</option>
             <option value="SUCCESS">Success</option>
@@ -202,97 +203,105 @@ export default function AdminAuditLogsPage() {
           </select>
         </label>
         <label className="text-sm">
-          <span className="text-xs uppercase tracking-wide text-muted">
-            From (local)
-          </span>
+          <span className="tv-label">From (local)</span>
           <input
             type="datetime-local"
             value={filters.created_from}
             onChange={(e) =>
               setFilters((prev) => ({ ...prev, created_from: e.target.value }))
             }
-            className="mt-1 w-full rounded-md border border-border bg-white px-3 py-2"
+            className="tv-input"
           />
         </label>
         <label className="text-sm">
-          <span className="text-xs uppercase tracking-wide text-muted">
-            To (local)
-          </span>
+          <span className="tv-label">To (local)</span>
           <input
             type="datetime-local"
             value={filters.created_to}
             onChange={(e) =>
               setFilters((prev) => ({ ...prev, created_to: e.target.value }))
             }
-            className="mt-1 w-full rounded-md border border-border bg-white px-3 py-2"
+            className="tv-input"
           />
         </label>
         <div className="flex items-end gap-2 sm:col-span-2 lg:col-span-3">
-          <button
-            type="submit"
-            className="rounded-md bg-accent px-4 py-2 text-sm font-semibold text-white hover:bg-accent-strong"
-          >
+          <Button type="submit" variant="primary">
             Apply filters
-          </button>
-          <button
+          </Button>
+          <Button
             type="button"
+            variant="secondary"
             onClick={() => {
               setFilters(emptyFilters);
               setApplied(emptyFilters);
             }}
-            className="rounded-md border border-border px-4 py-2 text-sm font-semibold hover:bg-accent-soft"
           >
             Clear
-          </button>
+          </Button>
         </div>
       </form>
 
       {status === "loading" ? (
-        <p className="text-sm text-muted" role="status">
-          Loading audit events…
-        </p>
+        <div className="space-y-2" role="status" aria-busy>
+          {Array.from({ length: 6 }).map((_, index) => (
+            <Skeleton key={index} className="h-12 w-full rounded-[0.75rem]" />
+          ))}
+          <span className="sr-only">Loading audit events...</span>
+        </div>
       ) : null}
 
       {status === "error" ? (
-        <div
-          role="alert"
-          className="rounded-xl border border-danger/30 bg-danger/5 px-4 py-3 text-sm"
+        <Alert
+          tone="error"
+          action={
+            <Button
+              size="sm"
+              variant="secondary"
+              onClick={() => void load(page, applied)}
+            >
+              Retry
+            </Button>
+          }
         >
-          <p className="text-danger">{error}</p>
-          <button
-            type="button"
-            className="mt-2 font-semibold text-danger underline"
-            onClick={() => void load(page, applied)}
-          >
-            Retry
-          </button>
-        </div>
+          {error ?? "Unable to load audit events."}
+        </Alert>
       ) : null}
 
       {status === "ready" ? <AuditEventsTable events={events} /> : null}
 
       {status === "ready" && totalPages > 1 ? (
-        <div className="flex flex-wrap items-center gap-3 text-sm">
-          <button
-            type="button"
-            disabled={page <= 1}
-            onClick={() => void load(page - 1, applied)}
-            className="rounded-md border border-border px-3 py-1.5 font-semibold disabled:opacity-50"
-          >
-            Previous
-          </button>
-          <span className="text-muted">
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-[var(--radius)] border border-border bg-surface px-4 py-3 text-sm shadow-[var(--shadow-sm)]">
+          <p className="text-muted">
             Page {page} of {totalPages} · {total} events
-          </span>
-          <button
-            type="button"
-            disabled={page >= totalPages}
-            onClick={() => void load(page + 1, applied)}
-            className="rounded-md border border-border px-3 py-1.5 font-semibold disabled:opacity-50"
-          >
-            Next
-          </button>
+          </p>
+          <div className="flex gap-2">
+            <Button
+              type="button"
+              size="sm"
+              variant="secondary"
+              disabled={page <= 1}
+              onClick={() => void load(page - 1, applied)}
+            >
+              Previous
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant="secondary"
+              disabled={page >= totalPages}
+              onClick={() => void load(page + 1, applied)}
+            >
+              Next
+            </Button>
+          </div>
         </div>
+      ) : null}
+
+      {status === "ready" && totalPages <= 1 && events.length > 0 ? (
+        <p className="flex items-center gap-2 text-xs text-muted">
+          <ScrollText className="h-3.5 w-3.5" strokeWidth={1.75} aria-hidden />
+          Showing {events.length} of {total} matching events
+        </p>
       ) : null}
     </div>
   );
@@ -311,22 +320,13 @@ function Field({
 }) {
   return (
     <label className="text-sm">
-      <span className="text-xs uppercase tracking-wide text-muted">{label}</span>
+      <span className="tv-label">{label}</span>
       <input
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        className="mt-1 w-full rounded-md border border-border bg-white px-3 py-2"
+        className="tv-input"
         placeholder={placeholder}
       />
     </label>
-  );
-}
-
-function Metric({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="rounded-xl border border-border bg-surface px-4 py-3 shadow-[var(--shadow)]">
-      <dt className="text-xs uppercase tracking-wide text-muted">{label}</dt>
-      <dd className="mt-1 font-display text-2xl text-foreground">{value}</dd>
-    </div>
   );
 }

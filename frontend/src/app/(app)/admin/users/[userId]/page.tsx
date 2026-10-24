@@ -6,6 +6,12 @@ import { useCallback, useEffect, useState } from "react";
 
 import { useAuth, useHandleUnauthorized } from "@/components/auth-provider";
 import { ConfirmDialog } from "@/components/confirm-dialog";
+import { Alert } from "@/components/ui/alert";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { PageHeader, SectionHeading } from "@/components/ui/page-header";
+import { Panel, StatCard } from "@/components/ui/panel";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
   ApiError,
   getAdminUserProfileRequest,
@@ -15,6 +21,13 @@ import {
   type AdminUserProfile,
 } from "@/lib/api";
 import { formatDateTime } from "@/lib/format";
+
+function RoleBadge({ role }: { role: string }) {
+  const upper = role.toUpperCase();
+  if (upper === "ADMIN") return <Badge tone="accent">Admin</Badge>;
+  if (upper === "OWNER") return <Badge tone="warning">Owner</Badge>;
+  return <Badge tone="neutral">{upper === "VIEWER" ? "Viewer" : role}</Badge>;
+}
 
 export default function AdminUserProfilePage() {
   const params = useParams<{ userId: string }>();
@@ -163,60 +176,52 @@ export default function AdminUserProfilePage() {
       </Link>
 
       {status === "loading" ? (
-        <p className="text-sm text-muted" role="status">
-          Loading profile…
-        </p>
-      ) : null}
-
-      {status === "error" ? (
-        <div
-          role="alert"
-          className="rounded-xl border border-danger/30 bg-danger/5 px-4 py-4 text-sm"
-        >
-          <p className="text-danger">{error}</p>
-          <p className="mt-2 text-muted">
-            {errorCode === 404
-              ? "No registered user matches this ID."
-              : "Profile details from the failed response are not shown."}
-          </p>
-          <button
-            type="button"
-            className="mt-3 font-semibold text-danger underline"
-            onClick={() => void load()}
-          >
-            Retry
-          </button>
+        <div className="space-y-3" role="status" aria-busy>
+          <Skeleton className="h-10 w-64" />
+          <Skeleton className="h-40 w-full rounded-[var(--radius)]" />
+          <span className="sr-only">Loading profile...</span>
         </div>
       ) : null}
 
-      {message ? (
-        <p role="status" className="text-sm text-accent-strong">
-          {message}
-        </p>
+      {status === "error" ? (
+        <Alert
+          tone="error"
+          title={error ?? "Unable to load user profile."}
+          action={
+            <Button size="sm" variant="secondary" onClick={() => void load()}>
+              Retry
+            </Button>
+          }
+        >
+          {errorCode === 404
+            ? "No registered user matches this ID."
+            : "Profile details from the failed response are not shown."}
+        </Alert>
       ) : null}
-      {error && status === "ready" ? (
-        <p role="alert" className="text-sm text-danger">
-          {error}
-        </p>
-      ) : null}
+
+      {message ? <Alert tone="success">{message}</Alert> : null}
+      {error && status === "ready" ? <Alert tone="error">{error}</Alert> : null}
 
       {status === "ready" && profile ? (
         <>
-          <header className="rounded-xl border border-border bg-surface p-6 shadow-[var(--shadow)]">
-            <p className="text-sm font-semibold uppercase tracking-[0.18em] text-accent-strong">
-              User profile
-            </p>
-            <h1 className="mt-2 font-display text-3xl tracking-tight text-foreground">
-              {profile.name}
-            </h1>
-            <p className="mt-1 text-sm text-muted">{profile.email}</p>
+          <Panel>
+            <PageHeader
+              eyebrow="User profile"
+              title={profile.name}
+              description={profile.email}
+              actions={
+                <div className="flex flex-wrap gap-2">
+                  <RoleBadge role={profile.role} />
+                  {profile.is_active ? (
+                    <Badge tone="success">Active</Badge>
+                  ) : (
+                    <Badge tone="danger">Inactive</Badge>
+                  )}
+                </div>
+              }
+            />
             <dl className="mt-6 grid gap-4 sm:grid-cols-2">
               <Detail label="User ID" value={profile.id} mono />
-              <Detail label="Role" value={profile.role} />
-              <Detail
-                label="Account status"
-                value={profile.is_active ? "Active" : "Inactive"}
-              />
               <Detail
                 label="Registered"
                 value={formatDateTime(profile.created_at)}
@@ -238,79 +243,72 @@ export default function AdminUserProfilePage() {
                 }
               />
             </dl>
-          </header>
+          </Panel>
 
-          <section className="rounded-xl border border-border bg-surface p-5 shadow-[var(--shadow)]">
-            <h2 className="font-display text-xl text-foreground">
-              Account activity
-            </h2>
-            <p className="mt-1 text-sm text-muted">
-              Counts from the live database. This profile never includes document
-              contents or storage locations.
-            </p>
+          <Panel>
+            <SectionHeading
+              title="Account activity"
+              description="Counts from the live database. This profile never includes document contents or storage locations."
+            />
             <dl className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-              <Stat
+              <StatCard
                 label="Owned documents"
                 value={profile.activity.owned_documents}
               />
-              <Stat
+              <StatCard
                 label="Active grants received"
                 value={profile.activity.active_grants_received}
               />
-              <Stat
+              <StatCard
                 label="Audit events (as actor)"
                 value={profile.activity.audit_events_as_actor}
               />
-              <Stat
+              <StatCard
                 label="Denied attempts"
                 value={profile.activity.denied_audit_events_as_actor}
               />
             </dl>
-          </section>
+          </Panel>
 
           {pendingPromotion ? (
-            <section className="rounded-xl border border-border bg-surface p-5 shadow-[var(--shadow)]">
-              <h2 className="font-display text-xl text-foreground">
-                Pending owner request
-              </h2>
+            <Panel>
+              <SectionHeading title="Pending owner request" />
               <p className="mt-2 text-sm text-muted">
                 Submitted {formatDateTime(pendingPromotion.created_at)}
               </p>
               {pendingPromotion.justification ? (
-                <p className="mt-3 rounded-md border border-border bg-white px-3 py-2 text-sm">
+                <p className="mt-3 rounded-[0.625rem] border border-border bg-accent-soft/40 px-3 py-2 text-sm">
                   {pendingPromotion.justification}
                 </p>
               ) : (
                 <p className="mt-3 text-sm text-muted">No justification provided.</p>
               )}
               <div className="mt-4 flex flex-wrap gap-2">
-                <button
+                <Button
                   type="button"
+                  variant="primary"
                   disabled={reviewBusy}
                   onClick={() => void onReview("APPROVED")}
-                  className="rounded-md bg-accent px-4 py-2 text-sm font-semibold text-white hover:bg-accent-strong disabled:opacity-60"
                 >
-                  {reviewBusy ? "Working…" : "Approve → Owner"}
-                </button>
-                <button
+                  {reviewBusy ? "Working..." : "Approve -> Owner"}
+                </Button>
+                <Button
                   type="button"
+                  variant="danger"
                   disabled={reviewBusy}
                   onClick={() => void onReview("REJECTED")}
-                  className="rounded-md border border-danger/40 px-4 py-2 text-sm font-semibold text-danger disabled:opacity-60"
                 >
                   Reject
-                </button>
+                </Button>
               </div>
-            </section>
+            </Panel>
           ) : null}
 
           {profile.latest_promotion &&
           profile.latest_promotion.status !== "PENDING" ? (
-            <section className="rounded-xl border border-border bg-surface p-5 text-sm shadow-[var(--shadow)]">
-              <h2 className="font-display text-xl text-foreground">
-                Latest owner request
-              </h2>
-              <p className="mt-2 text-muted">
+            <Panel>
+              <SectionHeading title="Latest owner request" />
+              <p className="mt-2 text-sm text-muted">
                 {profile.latest_promotion.status} · submitted{" "}
                 {formatDateTime(profile.latest_promotion.created_at)}
                 {profile.latest_promotion.reviewed_at
@@ -318,20 +316,20 @@ export default function AdminUserProfilePage() {
                   : ""}
               </p>
               {profile.latest_promotion.admin_note ? (
-                <p className="mt-2">Admin note: {profile.latest_promotion.admin_note}</p>
+                <p className="mt-2 text-sm">
+                  Admin note: {profile.latest_promotion.admin_note}
+                </p>
               ) : null}
-            </section>
+            </Panel>
           ) : null}
 
-          <section className="rounded-xl border border-border bg-surface p-5 shadow-[var(--shadow)]">
-            <h2 className="font-display text-xl text-foreground">
-              Manage account
-            </h2>
+          <Panel>
+            <SectionHeading title="Manage account" />
             <div className="mt-4 flex flex-wrap items-end gap-4">
               {profile.role === "ADMIN" ? (
                 <div className="text-sm">
-                  <span className="mb-1 block font-medium">Platform role</span>
-                  <p className="rounded-md border border-border bg-accent-soft/40 px-3 py-2 font-semibold text-accent-strong">
+                  <span className="tv-label">Platform role</span>
+                  <p className="rounded-[0.625rem] border border-border bg-accent-soft/40 px-3 py-2 font-semibold text-accent-strong">
                     ADMIN
                   </p>
                   <p className="mt-1 max-w-sm text-xs text-muted">
@@ -341,14 +339,14 @@ export default function AdminUserProfilePage() {
                 </div>
               ) : (
                 <label className="text-sm">
-                  <span className="mb-1 block font-medium">Platform role</span>
+                  <span className="tv-label">Platform role</span>
                   <select
                     value={profile.role === "OWNER" ? "OWNER" : "VIEWER"}
                     disabled={roleBusy || isSelf}
                     onChange={(e) =>
                       void onRoleChange(e.target.value as "OWNER" | "VIEWER")
                     }
-                    className="rounded-md border border-border bg-white px-3 py-2 text-sm"
+                    className="tv-input"
                   >
                     <option value="VIEWER">Viewer</option>
                     <option value="OWNER">Owner</option>
@@ -360,8 +358,9 @@ export default function AdminUserProfilePage() {
                   ) : null}
                 </label>
               )}
-              <button
+              <Button
                 type="button"
+                variant={profile.is_active ? "danger" : "secondary"}
                 disabled={Boolean(isSelf && profile.is_active)}
                 title={
                   isSelf && profile.is_active
@@ -369,10 +368,9 @@ export default function AdminUserProfilePage() {
                     : undefined
                 }
                 onClick={() => setConfirmStatus(true)}
-                className="rounded-md border border-border px-4 py-2 text-sm font-semibold hover:bg-accent-soft disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {profile.is_active ? "Deactivate account" : "Activate account"}
-              </button>
+              </Button>
             </div>
             <p className="mt-3 text-xs text-muted">
               Ordinary role changes are Viewer ↔ Owner only and are enforced by
@@ -380,7 +378,7 @@ export default function AdminUserProfilePage() {
               administrator cannot be deactivated. Passwords and tokens are never
               shown here.
             </p>
-          </section>
+          </Panel>
         </>
       ) : null}
 
@@ -420,7 +418,7 @@ function Detail({
   mono?: boolean;
 }) {
   return (
-    <div>
+    <div className="rounded-[0.75rem] border border-border bg-accent-soft/40 px-4 py-3">
       <dt className="text-xs uppercase tracking-wide text-muted">{label}</dt>
       <dd
         className={`mt-1 break-all text-sm text-foreground ${
@@ -429,15 +427,6 @@ function Detail({
       >
         {value}
       </dd>
-    </div>
-  );
-}
-
-function Stat({ label, value }: { label: string; value: number }) {
-  return (
-    <div className="rounded-md border border-border/70 px-3 py-2">
-      <dt className="text-xs uppercase tracking-wide text-muted">{label}</dt>
-      <dd className="mt-1 font-display text-2xl text-foreground">{value}</dd>
     </div>
   );
 }

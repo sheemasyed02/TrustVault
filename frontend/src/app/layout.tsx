@@ -14,8 +14,8 @@ export const metadata: Metadata = {
   description:
     "Secure document sharing with server-side access control and an auditable activity trail.",
   icons: {
-    icon: [{ url: "/trust.png", type: "image/png" }],
-    apple: [{ url: "/trust.png", type: "image/png" }],
+    icon: [{ url: "/logo.png", type: "image/png" }],
+    apple: [{ url: "/logo.png", type: "image/png" }],
   },
 };
 
@@ -34,11 +34,11 @@ export default function RootLayout({
           crossOrigin="anonymous"
         />
         <link
-          href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=Source+Serif+4:wght@500;600;700&display=swap"
+          href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700&family=Merienda:wght@500;600;700&display=swap"
           rel="stylesheet"
         />
       </head>
-      <body className="antialiased">
+      <body className="font-sans antialiased">
         <Providers>
           <div className="flex min-h-screen flex-col">
             <SiteHeader />

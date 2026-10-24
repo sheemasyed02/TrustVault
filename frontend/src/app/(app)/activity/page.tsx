@@ -1,10 +1,17 @@
 "use client";
 
+import { Eye } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 
 import { useAuth, useHandleUnauthorized } from "@/components/auth-provider";
+import { Alert } from "@/components/ui/alert";
+import { Button, buttonClassName } from "@/components/ui/button";
+import { EmptyState } from "@/components/ui/empty-state";
+import { PageHeader } from "@/components/ui/page-header";
+import { StatCard } from "@/components/ui/panel";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
   ApiError,
   listOwnerDocumentViewActivityRequest,
@@ -81,117 +88,110 @@ export default function OwnerActivityPage() {
   if (!user || user.role !== "OWNER") {
     return (
       <p className="text-sm text-muted" role="status">
-        Redirecting…
+        Redirecting...
       </p>
     );
   }
 
   return (
     <div className="space-y-5">
-      <header>
-        <p className="text-xs font-semibold uppercase tracking-[0.16em] text-accent-strong">
-          Document activity
-        </p>
-        <h1 className="mt-1.5 font-display text-2xl tracking-tight text-foreground sm:text-3xl">
-          External views of your documents
-        </h1>
-        <p className="mt-2 max-w-xl text-sm text-muted">
-          How often others open your files. Your own opens remain in the security
-          trail but are not counted here.
-        </p>
-      </header>
+      <PageHeader
+        title="External views"
+        description="How often others open your files. Your own opens remain in the security trail but are not counted here."
+      />
 
       {summary ? (
         <dl className="grid gap-3 sm:grid-cols-2">
-          <div className="rounded-xl border border-border bg-surface p-4 shadow-[var(--shadow)]">
-            <dt className="text-xs uppercase tracking-wide text-muted">
-              Total external view events
-            </dt>
-            <dd className="mt-2 font-display text-3xl text-foreground">
-              {summary.total_view_events}
-            </dd>
-          </div>
-          <div className="rounded-xl border border-border bg-surface p-4 shadow-[var(--shadow)]">
-            <dt className="text-xs uppercase tracking-wide text-muted">
-              Documents with external views
-            </dt>
-            <dd className="mt-2 font-display text-3xl text-foreground">
-              {summary.documents_with_views}
-            </dd>
-          </div>
+          <StatCard
+            label="Total external view events"
+            value={String(summary.total_view_events)}
+            icon={<Eye className="h-4 w-4" strokeWidth={1.75} />}
+          />
+          <StatCard
+            label="Documents with external views"
+            value={String(summary.documents_with_views)}
+          />
         </dl>
       ) : null}
 
       {status === "loading" ? (
-        <p className="text-sm text-muted" role="status">
-          Loading view activity…
-        </p>
-      ) : null}
-      {status === "error" ? (
-        <div
-          role="alert"
-          className="rounded-xl border border-danger/30 bg-danger/5 px-4 py-3 text-sm"
-        >
-          <p className="text-danger">{error}</p>
-          <button
-            type="button"
-            className="mt-2 font-semibold text-danger underline"
-            onClick={() => void load(page)}
-          >
-            Retry
-          </button>
+        <div className="space-y-2" role="status" aria-busy>
+          {Array.from({ length: 4 }).map((_, index) => (
+            <Skeleton key={index} className="h-12 w-full rounded-[0.75rem]" />
+          ))}
+          <span className="sr-only">Loading view activity...</span>
         </div>
+      ) : null}
+
+      {status === "error" ? (
+        <Alert
+          tone="error"
+          action={
+            <Button size="sm" variant="secondary" onClick={() => void load(page)}>
+              Retry
+            </Button>
+          }
+        >
+          {error}
+        </Alert>
       ) : null}
 
       {status === "ready" && items.length === 0 ? (
-        <div className="rounded-xl border border-dashed border-border bg-surface px-6 py-10 text-center">
-          <p className="font-medium text-foreground">No owned documents yet</p>
-          <p className="mt-2 text-sm text-muted">
-            Upload a document to start collecting authorised view history.
-          </p>
-          <Link
-            href="/documents/upload"
-            className="mt-4 inline-block font-semibold text-accent-strong underline"
-          >
-            Upload a document
-          </Link>
-        </div>
+        <EmptyState
+          title="No owned documents yet"
+          description="Upload a document to start collecting authorised view history."
+          icon={<Eye className="h-5 w-5" strokeWidth={1.75} />}
+          action={
+            <Link
+              href="/documents/upload"
+              className={buttonClassName({ variant: "primary" })}
+            >
+              Upload a document
+            </Link>
+          }
+        />
       ) : null}
 
       {status === "ready" && items.length > 0 ? (
-        <div className="overflow-x-auto rounded-xl border border-border bg-surface shadow-[var(--shadow)]">
-          <table className="min-w-full text-left text-sm">
-            <thead className="border-b border-border text-xs uppercase tracking-wide text-muted">
+        <div className="tv-table-wrap">
+          <table className="tv-table">
+            <thead>
               <tr>
-                <th className="px-4 py-3 font-semibold">Document</th>
-                <th className="px-4 py-3 font-semibold">External views</th>
-                <th className="px-4 py-3 font-semibold">Distinct external viewers</th>
-                <th className="px-4 py-3 font-semibold">Latest external view</th>
-                <th className="px-4 py-3 font-semibold">History</th>
+                <th>Document</th>
+                <th>External views</th>
+                <th className="hidden sm:table-cell">Distinct viewers</th>
+                <th className="hidden md:table-cell">Latest external view</th>
+                <th>History</th>
               </tr>
             </thead>
             <tbody>
               {items.map((row) => (
-                <tr key={row.document_id} className="border-b border-border/70">
-                  <td className="px-4 py-3">
+                <tr key={row.document_id}>
+                  <td>
                     <Link
                       href={`/documents/${row.document_id}`}
                       className="font-medium text-foreground hover:text-accent-strong"
                     >
                       {row.title}
                     </Link>
+                    <p className="mt-1 text-xs text-muted sm:hidden">
+                      {row.distinct_viewers} distinct
+                      {row.latest_view_at
+                        ? ` · ${formatDateTime(row.latest_view_at)}`
+                        : ""}
+                    </p>
                   </td>
-                  <td className="px-4 py-3 font-semibold">{row.total_views}</td>
-                  <td className="px-4 py-3">{row.distinct_viewers}</td>
-                  <td className="px-4 py-3 text-muted">
+                  <td className="font-semibold">{row.total_views}</td>
+                  <td className="hidden sm:table-cell">{row.distinct_viewers}</td>
+                  <td className="hidden text-muted md:table-cell">
                     {row.latest_view_at
                       ? formatDateTime(row.latest_view_at)
                       : "—"}
                   </td>
-                  <td className="px-4 py-3">
+                  <td>
                     <Link
                       href={`/documents/${row.document_id}#document-activity`}
-                      className="text-xs font-semibold text-accent-strong underline"
+                      className="text-xs font-semibold text-accent-strong hover:underline"
                     >
                       Open history
                     </Link>
@@ -204,26 +204,30 @@ export default function OwnerActivityPage() {
       ) : null}
 
       {status === "ready" && totalPages > 1 ? (
-        <div className="flex flex-wrap items-center gap-3 text-sm">
-          <button
-            type="button"
-            disabled={page <= 1}
-            onClick={() => void load(page - 1)}
-            className="rounded-md border border-border px-3 py-1.5 font-semibold disabled:opacity-50"
-          >
-            Previous
-          </button>
-          <span className="text-muted">
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-[var(--radius)] border border-border bg-surface px-4 py-3 text-sm shadow-[var(--shadow-sm)]">
+          <p className="text-muted">
             Page {page} of {totalPages} ({total} documents)
-          </span>
-          <button
-            type="button"
-            disabled={page >= totalPages}
-            onClick={() => void load(page + 1)}
-            className="rounded-md border border-border px-3 py-1.5 font-semibold disabled:opacity-50"
-          >
-            Next
-          </button>
+          </p>
+          <div className="flex gap-2">
+            <Button
+              type="button"
+              size="sm"
+              variant="secondary"
+              disabled={page <= 1}
+              onClick={() => void load(page - 1)}
+            >
+              Previous
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant="secondary"
+              disabled={page >= totalPages}
+              onClick={() => void load(page + 1)}
+            >
+              Next
+            </Button>
+          </div>
         </div>
       ) : null}
     </div>

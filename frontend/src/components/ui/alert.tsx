@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 
-type AlertTone = "error" | "success" | "info";
+type AlertTone = "error" | "success" | "info" | "warning";
 
 interface AlertProps {
   children: ReactNode;
@@ -10,9 +10,13 @@ interface AlertProps {
 }
 
 const toneClass: Record<AlertTone, string> = {
-  error: "border-danger/30 bg-danger/5 text-danger",
-  success: "border-accent/30 bg-accent-soft/60 text-accent-strong",
-  info: "border-border bg-white/70 text-foreground",
+  error:
+    "border-danger/30 bg-[color-mix(in_srgb,var(--danger)_8%,white)] text-danger",
+  success:
+    "border-success/30 bg-[color-mix(in_srgb,var(--success)_10%,white)] text-success",
+  warning:
+    "border-warning/30 bg-[color-mix(in_srgb,var(--warning)_10%,white)] text-warning",
+  info: "border-border bg-accent-soft/60 text-foreground",
 };
 
 export function Alert({
@@ -25,7 +29,7 @@ export function Alert({
   return (
     <div
       role={role}
-      className={`rounded-xl border px-4 py-3 text-sm ${toneClass[tone]}`}
+      className={`rounded-[var(--radius)] border px-4 py-3 text-sm ${toneClass[tone]}`}
     >
       {title ? <p className="font-semibold">{title}</p> : null}
       <div className={title ? "mt-1" : ""}>{children}</div>

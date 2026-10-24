@@ -1,8 +1,12 @@
 "use client";
 
+import { FileSearch, LoaderCircle } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
 import { useAuth, useHandleUnauthorized } from "@/components/auth-provider";
+import { Alert } from "@/components/ui/alert";
+import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
   ApiError,
   previewDocumentRequest,
@@ -13,7 +17,7 @@ import { DOCX_MIME_TYPE, PDF_MIME_TYPE } from "@/lib/upload-rules";
 
 interface DocumentPreviewProps {
   document: DocumentDetail;
-  /** Owner or EDIT grantee — contenteditable + save for DOCX only. */
+  /** Owner or EDIT grantee ? contenteditable + save for DOCX only. */
   canEdit: boolean;
   onDocumentUpdated?: (next: DocumentDetail) => void;
 }
@@ -149,70 +153,98 @@ export function DocumentPreview({
 
   if (!supported) {
     return (
-      <section className="rounded-xl border border-border bg-surface p-5 text-sm text-muted shadow-[var(--shadow)]">
-        <h2 className="font-display text-xl text-foreground">Preview</h2>
-        <p className="mt-2">
-          In-browser preview supports DOCX (and legacy PDF rows). This file type
-          ({document.mime_type}) is unsupported — use Download PDF if you still
-          have access.
-        </p>
+      <section className="rounded-[var(--radius)] border border-border bg-surface p-5 text-sm shadow-[var(--shadow-sm)] sm:p-6">
+        <div className="flex items-start gap-3">
+          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-accent-soft text-accent-strong">
+            <FileSearch className="h-5 w-5" strokeWidth={1.75} aria-hidden />
+          </span>
+          <div>
+            <h2 className="text-lg font-semibold tracking-tight text-foreground">
+              Preview
+            </h2>
+            <p className="mt-1 text-muted">
+              In-browser preview supports DOCX (and legacy PDF rows). This file
+              type ({document.mime_type}) is unsupported ? use Download PDF if
+              you still have access.
+            </p>
+          </div>
+        </div>
       </section>
     );
   }
 
   return (
-    <section className="rounded-xl border border-border bg-surface p-5 shadow-[var(--shadow)]">
+    <section className="rounded-[var(--radius)] border border-border bg-surface p-5 shadow-[var(--shadow-sm)] sm:p-6">
       <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h2 className="font-display text-xl text-foreground">
-            {isPdf
-              ? "PDF preview (legacy)"
-              : canEditDocx
-                ? "Edit document content"
-                : "Document preview"}
-          </h2>
-          <p className="mt-1 text-sm text-muted">
-            {isPdf
-              ? "Legacy PDF — in-app editing is not available."
-              : canEditDocx
-                ? "Edit the body below, then save. PDF export uses the latest saved file."
-                : "Read-only preview."}
-          </p>
+        <div className="flex items-start gap-3">
+          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-accent-soft text-accent-strong">
+            <FileSearch className="h-5 w-5" strokeWidth={1.75} aria-hidden />
+          </span>
+          <div>
+            <h2 className="text-lg font-semibold tracking-tight text-foreground">
+              {isPdf
+                ? "PDF preview (legacy)"
+                : canEditDocx
+                  ? "Edit document content"
+                  : "Document preview"}
+            </h2>
+            <p className="mt-1 text-sm text-muted">
+              {isPdf
+                ? "Legacy PDF ? in-app editing is not available."
+                : canEditDocx
+                  ? "Edit the body below, then save. PDF export uses the latest saved file."
+                  : "Read-only preview."}
+            </p>
+          </div>
         </div>
         {canEditDocx ? (
-          <button
+          <Button
             type="button"
+            variant="primary"
             onClick={() => void onSave()}
             disabled={!dirty || saving || status !== "ready"}
-            className="rounded-md bg-accent px-4 py-2 text-sm font-semibold text-white hover:bg-accent-strong disabled:opacity-60"
           >
-            {saving ? "Saving…" : "Save content"}
-          </button>
+            {saving ? (
+              <>
+                <LoaderCircle
+                  className="h-4 w-4 animate-spin"
+                  strokeWidth={1.75}
+                  aria-hidden
+                />
+                Saving?
+              </>
+            ) : (
+              "Save content"
+            )}
+          </Button>
         ) : null}
       </div>
 
       {status === "loading" || status === "idle" ? (
-        <p className="mt-4 text-sm text-muted" role="status">
-          Loading document…
-        </p>
+        <div className="mt-4 space-y-2" role="status" aria-busy>
+          <Skeleton className="h-4 w-full" />
+          <Skeleton className="h-4 w-[92%]" />
+          <Skeleton className="h-4 w-[80%]" />
+          <span className="sr-only">Loading document?</span>
+        </div>
       ) : null}
 
       {error ? (
-        <p role="alert" className="mt-4 text-sm text-danger">
-          {error}
-        </p>
+        <div className="mt-4">
+          <Alert tone="error">{error}</Alert>
+        </div>
       ) : null}
       {message ? (
-        <p role="status" className="mt-4 text-sm text-accent-strong">
-          {message}
-        </p>
+        <div className="mt-4">
+          <Alert tone="success">{message}</Alert>
+        </div>
       ) : null}
 
       {status === "ready" && isPdf && pdfUrl ? (
         <iframe
           title="PDF preview"
           src={pdfUrl}
-          className="mt-4 h-[70vh] w-full rounded-md border border-border bg-white"
+          className="mt-4 h-[70vh] w-full rounded-[0.75rem] border border-border bg-white"
         />
       ) : null}
 
@@ -227,7 +259,7 @@ export function DocumentPreview({
           onInput={() => {
             if (canEditDocx) setDirty(true);
           }}
-          className={`docx-preview mt-4 max-h-[70vh] overflow-auto rounded-md border border-border bg-white px-5 py-4 text-sm leading-relaxed text-foreground outline-none ${
+          className={`docx-preview mt-4 max-h-[70vh] overflow-auto rounded-[0.75rem] border border-border bg-white px-5 py-4 text-sm leading-relaxed text-foreground outline-none ${
             canEditDocx
               ? "focus-visible:ring-2 focus-visible:ring-accent/40"
               : "cursor-default"

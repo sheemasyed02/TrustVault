@@ -1,10 +1,13 @@
 "use client";
 
+import { LoaderCircle, Mail, UserRound } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useId, useState, type FormEvent } from "react";
 
-import { BrandLogo } from "@/components/brand-logo";
+import { AuthPasswordField } from "@/components/auth-password-field";
+import { AuthSplitLayout } from "@/components/auth-split-layout";
+import { Button } from "@/components/ui/button";
 import { ApiError, registerRequest } from "@/lib/api";
 
 export default function SignupPage() {
@@ -13,6 +16,7 @@ export default function SignupPage() {
   const emailId = useId();
   const passwordId = useId();
   const confirmId = useId();
+  const errorId = useId();
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -20,11 +24,13 @@ export default function SignupPage() {
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [attempted, setAttempted] = useState(false);
 
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError(null);
     setMessage(null);
+    setAttempted(true);
 
     const trimmedName = name.trim();
     const trimmedEmail = email.trim();
@@ -65,136 +71,167 @@ export default function SignupPage() {
     }
   }
 
-  return (
-    <div className="mx-auto grid w-full max-w-6xl flex-1 items-center gap-10 px-6 py-12 md:grid-cols-[1.15fr_0.85fr] md:px-10 md:py-16">
-      <section className="max-w-xl">
-        <p className="text-sm font-semibold uppercase tracking-[0.18em] text-accent-strong">
-          Create account
-        </p>
-        <div className="mt-4 flex items-center gap-3 md:gap-4">
-          <BrandLogo size="lg" decorative priority />
-          <h1 className="font-display text-4xl leading-tight tracking-tight text-foreground md:text-5xl">
-            TrustVault
-          </h1>
-        </div>
-        <p className="mt-4 max-w-md text-base leading-7 text-muted md:text-lg">
-          Public registration creates a Viewer account. You cannot choose Owner
-          or Administrator during signup — request owner access after signing in
-          if you need to upload documents.
-        </p>
-        <ul className="mt-8 space-y-3 text-sm leading-6 text-muted">
-          <li>Passwords are hashed on the server; they never appear in responses.</li>
-          <li>Role is assigned by TrustVault — client-supplied roles are ignored.</li>
-          <li>Administrators are provisioned only through the secure seed process.</li>
-        </ul>
-      </section>
+  const nameInvalid = attempted && name.trim().length < 2;
+  const emailInvalid =
+    attempted && (!email.trim() || !email.trim().includes("@"));
+  const passwordInvalid = attempted && password.length < 10;
+  const confirmInvalid =
+    attempted && (confirm.length === 0 || password !== confirm);
 
-      <section className="w-full max-w-md rounded-xl border border-border bg-surface p-6 shadow-[var(--shadow)] backdrop-blur md:p-8">
-        <h2 className="font-display text-2xl tracking-tight text-foreground">
-          Sign up
-        </h2>
+  return (
+    <AuthSplitLayout
+      welcome="Join as a Viewer."
+      support="Registration creates a Viewer account. Owner and Administrator roles are assigned by TrustVault administrators."
+      marketingLabel="TrustVault sign-up"
+    >
+      <section
+        aria-labelledby="sign-up-heading"
+        className="rounded-[var(--radius)] border border-border bg-surface p-6 shadow-[var(--shadow)] sm:p-8"
+      >
+        <h1
+          id="sign-up-heading"
+          className="text-2xl font-semibold tracking-tight text-foreground"
+        >
+          Create account
+        </h1>
         <p className="mt-2 text-sm leading-6 text-muted">
-          Already registered?{" "}
-          <Link href="/" className="font-semibold text-accent-strong underline">
-            Sign in
-          </Link>
-          .
+          Viewer access only. You cannot choose Owner or Administrator here.
         </p>
 
         <form className="mt-6 space-y-4" onSubmit={onSubmit} noValidate>
-          <div className="space-y-2">
-            <label htmlFor={nameId} className="block text-sm font-medium">
+          <div>
+            <label htmlFor={nameId} className="tv-label">
               Full name
             </label>
-            <input
-              id={nameId}
-              name="name"
-              type="text"
-              autoComplete="name"
-              required
-              value={name}
-              disabled={busy}
-              onChange={(e) => setName(e.target.value)}
-              className="w-full rounded-md border border-border bg-white px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-accent/40 disabled:opacity-70"
-            />
+            <div className="relative">
+              <UserRound
+                className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted"
+                strokeWidth={1.75}
+                aria-hidden
+              />
+              <input
+                id={nameId}
+                name="name"
+                type="text"
+                autoComplete="name"
+                required
+                value={name}
+                disabled={busy}
+                aria-invalid={nameInvalid || undefined}
+                onChange={(e) => setName(e.target.value)}
+                className={`tv-input pl-9 ${
+                  nameInvalid ? "border-danger focus:border-danger" : ""
+                }`}
+              />
+            </div>
           </div>
-          <div className="space-y-2">
-            <label htmlFor={emailId} className="block text-sm font-medium">
+
+          <div>
+            <label htmlFor={emailId} className="tv-label">
               Work email
             </label>
-            <input
-              id={emailId}
-              name="email"
-              type="email"
-              autoComplete="email"
-              required
-              value={email}
-              disabled={busy}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="you@company.com"
-              className="w-full rounded-md border border-border bg-white px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-accent/40 disabled:opacity-70"
-            />
+            <div className="relative">
+              <Mail
+                className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted"
+                strokeWidth={1.75}
+                aria-hidden
+              />
+              <input
+                id={emailId}
+                name="email"
+                type="email"
+                autoComplete="email"
+                required
+                value={email}
+                disabled={busy}
+                aria-invalid={emailInvalid || undefined}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="you@company.com"
+                className={`tv-input pl-9 ${
+                  emailInvalid ? "border-danger focus:border-danger" : ""
+                }`}
+              />
+            </div>
           </div>
-          <div className="space-y-2">
-            <label htmlFor={passwordId} className="block text-sm font-medium">
-              Password
-            </label>
-            <input
-              id={passwordId}
-              name="password"
-              type="password"
-              autoComplete="new-password"
-              required
-              minLength={10}
-              value={password}
-              disabled={busy}
-              onChange={(e) => setPassword(e.target.value)}
-              className="w-full rounded-md border border-border bg-white px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-accent/40 disabled:opacity-70"
-            />
-            <p className="text-xs text-muted">At least 10 characters.</p>
-          </div>
-          <div className="space-y-2">
-            <label htmlFor={confirmId} className="block text-sm font-medium">
-              Confirm password
-            </label>
-            <input
-              id={confirmId}
-              name="confirm"
-              type="password"
-              autoComplete="new-password"
-              required
-              minLength={10}
-              value={confirm}
-              disabled={busy}
-              onChange={(e) => setConfirm(e.target.value)}
-              className="w-full rounded-md border border-border bg-white px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-accent/40 disabled:opacity-70"
-            />
-          </div>
+
+          <AuthPasswordField
+            id={passwordId}
+            label="Password"
+            name="password"
+            autoComplete="new-password"
+            required
+            minLength={10}
+            value={password}
+            disabled={busy}
+            invalid={passwordInvalid}
+            hint="At least 10 characters."
+            onChange={(e) => setPassword(e.target.value)}
+          />
+
+          <AuthPasswordField
+            id={confirmId}
+            label="Confirm password"
+            name="confirm"
+            autoComplete="new-password"
+            required
+            minLength={10}
+            value={confirm}
+            disabled={busy}
+            invalid={confirmInvalid}
+            onChange={(e) => setConfirm(e.target.value)}
+          />
 
           {error ? (
             <p
+              id={errorId}
               role="alert"
-              className="rounded-md border border-danger/30 bg-danger/5 px-3 py-2 text-sm text-danger"
+              className="rounded-[0.625rem] border border-danger/30 bg-[color-mix(in_srgb,var(--danger)_8%,white)] px-3 py-2 text-sm text-danger"
             >
               {error}
             </p>
           ) : null}
           {message ? (
-            <p role="status" className="text-sm text-accent-strong">
+            <p
+              role="status"
+              className="rounded-[0.625rem] border border-success/30 bg-[color-mix(in_srgb,var(--success)_10%,white)] px-3 py-2 text-sm text-success"
+            >
               {message}
             </p>
           ) : null}
 
-          <button
+          <Button
             type="submit"
+            variant="primary"
             disabled={busy}
             aria-busy={busy}
-            className="w-full rounded-md bg-accent px-4 py-2.5 text-sm font-semibold text-white hover:bg-accent-strong disabled:cursor-not-allowed disabled:opacity-60"
+            aria-describedby={error ? errorId : undefined}
+            className="w-full"
           >
-            {busy ? "Creating account…" : "Create Viewer account"}
-          </button>
+            {busy ? (
+              <>
+                <LoaderCircle
+                  className="h-4 w-4 animate-spin"
+                  strokeWidth={1.75}
+                  aria-hidden
+                />
+                Creating account…
+              </>
+            ) : (
+              "Create Viewer account"
+            )}
+          </Button>
         </form>
+
+        <p className="mt-5 text-center text-sm text-muted">
+          Already registered?{" "}
+          <Link
+            href="/"
+            className="font-semibold text-accent-strong underline decoration-accent/40 underline-offset-2 transition-colors duration-[180ms] hover:text-accent"
+          >
+            Sign in
+          </Link>
+        </p>
       </section>
-    </div>
+    </AuthSplitLayout>
   );
 }

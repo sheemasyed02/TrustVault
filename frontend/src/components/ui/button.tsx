@@ -20,26 +20,26 @@ interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
 
 const variantClass: Record<ButtonVariant, string> = {
   primary:
-    "bg-accent text-white hover:bg-accent-strong focus-visible:text-white active:bg-accent-strong disabled:opacity-60 disabled:text-white",
+    "bg-accent text-white shadow-sm hover:bg-accent-strong focus-visible:text-white active:bg-accent-strong disabled:opacity-60 disabled:text-white",
   secondary:
-    "border border-border bg-white text-foreground hover:bg-accent-soft disabled:opacity-60",
+    "border border-border bg-surface text-foreground hover:bg-accent-soft disabled:opacity-60",
   /* Outline destructive — list/row actions (always visible, not hover-reveal) */
   danger:
-    "border border-danger/60 bg-danger/5 text-danger hover:bg-danger/10 focus-visible:bg-danger/10 active:bg-danger/15 disabled:opacity-60",
+    "border border-danger/50 bg-[color-mix(in_srgb,var(--danger)_6%,white)] text-danger hover:bg-[color-mix(in_srgb,var(--danger)_12%,white)] focus-visible:bg-[color-mix(in_srgb,var(--danger)_12%,white)] active:bg-[color-mix(in_srgb,var(--danger)_16%,white)] disabled:opacity-60",
   /* Solid destructive — confirmation dialogs; white label on filled danger */
   dangerSolid:
-    "border border-transparent bg-danger text-white hover:bg-danger/90 focus-visible:text-white active:bg-danger/90 disabled:opacity-60 disabled:text-white",
+    "border border-transparent bg-danger text-white hover:bg-[color-mix(in_srgb,var(--danger)_88%,black)] focus-visible:text-white active:bg-[color-mix(in_srgb,var(--danger)_88%,black)] disabled:opacity-60 disabled:text-white",
   ghost:
     "text-accent-strong hover:bg-accent-soft disabled:opacity-60",
 };
 
 const sizeClass: Record<ButtonSize, string> = {
-  sm: "min-h-8 px-2.5 py-1.5 text-xs leading-none",
-  md: "min-h-9 px-3.5 py-2 text-sm leading-none",
+  sm: "min-h-8 rounded-[0.5rem] px-2.5 py-1.5 text-xs leading-none",
+  md: "min-h-9 rounded-[0.625rem] px-3.5 py-2 text-sm leading-none",
 };
 
 const baseClass =
-  "inline-flex items-center justify-center gap-1.5 rounded-md font-semibold transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent";
+  "inline-flex items-center justify-center gap-1.5 font-semibold transition-[background-color,border-color,color,box-shadow,opacity] duration-[180ms] ease-out focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent";
 
 /** Shared class string for `<button>` and Next.js `<Link>` CTAs. */
 export function buttonClassName({

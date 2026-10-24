@@ -1,43 +1,32 @@
 import { Suspense } from "react";
 
-import { BrandLogo } from "@/components/brand-logo";
+import { AuthSplitLayout } from "@/components/auth-split-layout";
 import { LoginEntry } from "@/components/login-entry";
+import { Skeleton } from "@/components/ui/skeleton";
 
 export default function HomePage() {
   return (
-    <div className="mx-auto grid w-full max-w-6xl flex-1 items-center gap-10 px-6 py-12 md:grid-cols-[1.15fr_0.85fr] md:px-10 md:py-16">
-      <section className="max-w-xl">
-        <p className="text-sm font-semibold uppercase tracking-[0.18em] text-accent-strong">
-          Confidential documents
-        </p>
-        <div className="mt-4 flex items-center gap-3 md:gap-4">
-          <BrandLogo size="lg" decorative priority />
-          <h1 className="font-display text-4xl leading-tight tracking-tight text-foreground md:text-5xl">
-            TrustVault
-          </h1>
-        </div>
-        <p className="mt-4 max-w-md text-base leading-7 text-muted md:text-lg">
-          Sign in to access documents shared with named permissions. The server
-          decides every read, download, and share — not the browser.
-        </p>
-        <ul className="mt-8 space-y-3 text-sm leading-6 text-muted">
-          <li>Short-lived access tokens are kept in memory for this tab only.</li>
-          <li>Refreshing the page clears the session; sign in again to continue.</li>
-          <li>Role-based menus are guidance only; the API enforces access.</li>
-        </ul>
-      </section>
-
-      <div className="flex justify-start md:justify-end">
-        <Suspense
-          fallback={
-            <div className="w-full max-w-md rounded-xl border border-border bg-surface p-6 text-sm text-muted shadow-[var(--shadow)]">
-              Loading sign-in…
-            </div>
-          }
-        >
-          <LoginEntry />
-        </Suspense>
-      </div>
-    </div>
+    <AuthSplitLayout
+      welcome="Welcome back."
+      support="Sign in to open confidential documents protected by server-side permissions."
+      marketingLabel="TrustVault sign-in"
+    >
+      <Suspense
+        fallback={
+          <div
+            className="rounded-[var(--radius)] border border-border bg-surface p-6 shadow-[var(--shadow)] sm:p-8"
+            role="status"
+          >
+            <Skeleton className="h-7 w-28" />
+            <Skeleton className="mt-4 h-4 w-full" />
+            <Skeleton className="mt-6 h-10 w-full" />
+            <Skeleton className="mt-3 h-10 w-full" />
+            <p className="mt-4 text-sm text-muted">Loading sign-in…</p>
+          </div>
+        }
+      >
+        <LoginEntry />
+      </Suspense>
+    </AuthSplitLayout>
   );
 }

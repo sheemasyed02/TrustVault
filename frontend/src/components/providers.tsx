@@ -3,7 +3,12 @@
 import type { ReactNode } from "react";
 
 import { AuthProvider } from "@/components/auth-provider";
+import { ToastProvider } from "@/components/ui/toast";
 
 export function Providers({ children }: { children: ReactNode }) {
-  return <AuthProvider>{children}</AuthProvider>;
+  return (
+    <AuthProvider>
+      <ToastProvider>{children}</ToastProvider>
+    </AuthProvider>
+  );
 }

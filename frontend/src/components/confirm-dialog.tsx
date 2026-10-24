@@ -45,7 +45,7 @@ export function ConfirmDialog({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 p-4 sm:items-center"
+      className="fixed inset-0 z-50 flex items-end justify-center bg-[color-mix(in_srgb,var(--sidebar)_45%,transparent)] p-4 backdrop-blur-[2px] sm:items-center"
       role="presentation"
       onMouseDown={(event) => {
         if (event.target === event.currentTarget && !busy) onCancel();
@@ -56,9 +56,12 @@ export function ConfirmDialog({
         aria-modal="true"
         aria-labelledby={titleId}
         aria-describedby={descriptionId}
-        className="w-full max-w-md rounded-xl border border-border bg-surface p-5 shadow-[var(--shadow)]"
+        className="max-h-[min(90vh,32rem)] w-full max-w-md overflow-y-auto rounded-[var(--radius)] border border-border bg-surface p-5 shadow-[var(--shadow)] sm:p-6"
       >
-        <h2 id={titleId} className="font-display text-xl text-foreground">
+        <h2
+          id={titleId}
+          className="text-xl font-semibold tracking-tight text-foreground"
+        >
           {title}
         </h2>
         <p id={descriptionId} className="mt-2 text-sm leading-6 text-muted">
@@ -78,7 +81,7 @@ export function ConfirmDialog({
             disabled={busy}
             onClick={onConfirm}
           >
-            {busy ? "Working…" : confirmLabel}
+            {busy ? "Working..." : confirmLabel}
           </Button>
         </div>
       </div>

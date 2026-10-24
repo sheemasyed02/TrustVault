@@ -1,9 +1,16 @@
 "use client";
 
+import { UserCog } from "lucide-react";
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 
 import { useAuth, useHandleUnauthorized } from "@/components/auth-provider";
+import { Alert } from "@/components/ui/alert";
+import { Button } from "@/components/ui/button";
+import { EmptyState } from "@/components/ui/empty-state";
+import { PageHeader } from "@/components/ui/page-header";
+import { Panel } from "@/components/ui/panel";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
   ApiError,
   listAdminPromotionsRequest,
@@ -83,87 +90,95 @@ export default function AdminPromotionsPage() {
         ← Admin dashboard
       </Link>
 
-      <header>
-        <h1 className="font-display text-3xl tracking-tight text-foreground">
-          Owner promotion requests
-        </h1>
-        <p className="mt-2 text-sm text-muted">
-          Approve to grant Owner capabilities (Viewer → Owner only). Approval
-          never assigns Admin. Existing document grants are preserved.
-        </p>
-      </header>
+      <PageHeader
+        title="Owner promotion requests"
+        description="Approve to grant Owner capabilities (Viewer to Owner only). Approval never assigns Admin. Existing document grants are preserved."
+        actions={
+          <Button type="button" variant="secondary" onClick={() => void load()}>
+            Refresh
+          </Button>
+        }
+      />
 
-      {message ? (
-        <p role="status" className="text-sm text-accent-strong">
-          {message}
-        </p>
-      ) : null}
-      {error ? (
-        <p role="alert" className="text-sm text-danger">
-          {error}
-        </p>
-      ) : null}
+      {message ? <Alert tone="success">{message}</Alert> : null}
+      {error && status !== "error" ? <Alert tone="error">{error}</Alert> : null}
 
       {status === "loading" ? (
-        <p className="text-sm text-muted" role="status">
-          Loading pending requests…
-        </p>
+        <div className="space-y-2" role="status" aria-busy>
+          {Array.from({ length: 3 }).map((_, index) => (
+            <Skeleton key={index} className="h-28 w-full rounded-[var(--radius)]" />
+          ))}
+          <span className="sr-only">Loading pending requests...</span>
+        </div>
       ) : null}
 
       {status === "error" ? (
-        <button
-          type="button"
-          className="text-sm font-semibold text-danger underline"
-          onClick={() => void load()}
+        <Alert
+          tone="error"
+          action={
+            <Button size="sm" variant="secondary" onClick={() => void load()}>
+              Retry
+            </Button>
+          }
         >
-          Retry
-        </button>
+          {error ?? "Unable to load requests."}
+        </Alert>
       ) : null}
 
       {status === "ready" && items.length === 0 ? (
-        <div className="rounded-xl border border-dashed border-border bg-surface px-6 py-10 text-center">
-          <p className="font-medium text-foreground">No pending requests</p>
-          <p className="mt-2 text-sm text-muted">
-            When a Viewer asks for Owner access, their request appears here.
-          </p>
-        </div>
+        <EmptyState
+          title="No pending requests"
+          description="When a Viewer asks for Owner access, their request appears here."
+          icon={<UserCog className="h-5 w-5" strokeWidth={1.75} />}
+        />
       ) : null}
 
       {status === "ready" && items.length > 0 ? (
         <ul className="space-y-3">
           {items.map((item) => (
-            <li
-              key={item.id}
-              className="rounded-xl border border-border bg-surface p-4 shadow-[var(--shadow)]"
-            >
-              <p className="font-semibold text-foreground">
-                {item.requester?.name ?? item.requester_id}
-              </p>
-              <p className="text-sm text-muted">
-                {item.requester?.email} · submitted{" "}
-                {formatDateTime(item.created_at)}
-              </p>
-              {item.justification ? (
-                <p className="mt-2 text-sm">{item.justification}</p>
-              ) : null}
-              <div className="mt-3 flex flex-wrap gap-2">
-                <button
-                  type="button"
-                  disabled={busyId === item.id}
-                  onClick={() => void review(item.id, "APPROVED")}
-                  className="rounded-md bg-accent px-3 py-1.5 text-xs font-semibold text-white hover:bg-accent-strong disabled:opacity-60"
-                >
-                  Approve
-                </button>
-                <button
-                  type="button"
-                  disabled={busyId === item.id}
-                  onClick={() => void review(item.id, "REJECTED")}
-                  className="rounded-md border border-danger/40 px-3 py-1.5 text-xs font-semibold text-danger disabled:opacity-60"
-                >
-                  Reject
-                </button>
-              </div>
+            <li key={item.id}>
+              <Panel className="!p-4">
+                <p className="font-semibold text-foreground">
+                  {item.requester?.name ?? item.requester_id}
+                </p>
+                <p className="mt-1 text-sm text-muted">
+                  {item.requester?.email} · submitted{" "}
+                  {formatDateTime(item.created_at)}
+                </p>
+                {item.justification ? (
+                  <p className="mt-3 rounded-[0.625rem] border border-border bg-accent-soft/40 px-3 py-2 text-sm">
+                    {item.justification}
+                  </p>
+                ) : null}
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="primary"
+                    disabled={busyId === item.id}
+                    onClick={() => void review(item.id, "APPROVED")}
+                  >
+                    {busyId === item.id ? "Working..." : "Approve"}
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="danger"
+                    disabled={busyId === item.id}
+                    onClick={() => void review(item.id, "REJECTED")}
+                  >
+                    Reject
+                  </Button>
+                  {item.requester_id ? (
+                    <Link
+                      href={`/admin/users/${item.requester_id}`}
+                      className="inline-flex min-h-8 items-center text-xs font-semibold text-accent-strong hover:underline"
+                    >
+                      View profile
+                    </Link>
+                  ) : null}
+                </div>
+              </Panel>
             </li>
           ))}
         </ul>

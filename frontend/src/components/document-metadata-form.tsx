@@ -1,8 +1,11 @@
 "use client";
 
-import { useState, type FormEvent } from "react";
+import { LoaderCircle } from "lucide-react";
+import { useEffect, useId, useState, type FormEvent } from "react";
 
 import { useAuth, useHandleUnauthorized } from "@/components/auth-provider";
+import { Alert } from "@/components/ui/alert";
+import { Button } from "@/components/ui/button";
 import {
   ApiError,
   patchDocumentRequest,
@@ -25,6 +28,9 @@ export function DocumentMetadataForm({
 }: DocumentMetadataFormProps) {
   const { accessToken } = useAuth();
   const handleUnauthorized = useHandleUnauthorized();
+  const titleId = useId();
+  const categoryId = useId();
+  const descriptionId = useId();
   const [title, setTitle] = useState(document.title);
   const [category, setCategory] = useState(document.category);
   const [description, setDescription] = useState(document.description ?? "");
@@ -32,7 +38,26 @@ export function DocumentMetadataForm({
   const [message, setMessage] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
+  useEffect(() => {
+    setTitle(document.title);
+    setCategory(document.category);
+    setDescription(document.description ?? "");
+  }, [document.id, document.title, document.category, document.description]);
+
   if (!canEdit) return null;
+
+  const dirty =
+    title.trim() !== document.title ||
+    category.trim() !== document.category ||
+    (description.trim() || "") !== (document.description?.trim() || "");
+
+  function onCancel() {
+    setTitle(document.title);
+    setCategory(document.category);
+    setDescription(document.description ?? "");
+    setError(null);
+    setMessage(null);
+  }
 
   async function onSubmit(event: FormEvent) {
     event.preventDefault();
@@ -75,11 +100,14 @@ export function DocumentMetadataForm({
   return (
     <section
       aria-label="Edit metadata"
-      className="rounded-xl border border-border bg-surface p-5 shadow-[var(--shadow-sm)]"
+      className="rounded-[var(--radius)] border border-border bg-surface p-5 shadow-[var(--shadow-sm)] sm:p-6"
     >
-      <h2 className="font-display text-xl text-foreground">Edit details</h2>
+      <h2 className="text-lg font-semibold tracking-tight text-foreground">
+        Edit details
+      </h2>
       <p className="mt-1 text-sm text-muted">
-        Update the title, category, and description. Content editing is separate.
+        Update title, category, and description only. This does not change the
+        file contents.
       </p>
 
       <form
@@ -87,53 +115,74 @@ export function DocumentMetadataForm({
         className="mt-4 space-y-3"
         noValidate
       >
-        <label className="block text-sm">
-          <span className="tv-label">Title</span>
+        <div>
+          <label htmlFor={titleId} className="tv-label">
+            Title
+          </label>
           <input
+            id={titleId}
             className="tv-input"
             value={title}
             maxLength={255}
+            disabled={submitting}
             onChange={(event) => setTitle(event.target.value)}
           />
-        </label>
-        <label className="block text-sm">
-          <span className="tv-label">Category</span>
+        </div>
+        <div>
+          <label htmlFor={categoryId} className="tv-label">
+            Category
+          </label>
           <input
+            id={categoryId}
             className="tv-input"
             value={category}
             maxLength={128}
+            disabled={submitting}
             onChange={(event) => setCategory(event.target.value)}
           />
-        </label>
-        <label className="block text-sm">
-          <span className="tv-label">Description</span>
+        </div>
+        <div>
+          <label htmlFor={descriptionId} className="tv-label">
+            Description
+          </label>
           <textarea
+            id={descriptionId}
             className="tv-input"
             value={description}
             maxLength={5000}
             rows={3}
+            disabled={submitting}
             onChange={(event) => setDescription(event.target.value)}
           />
-        </label>
+        </div>
 
-        {error ? (
-          <p role="alert" className="text-sm text-danger">
-            {error}
-          </p>
-        ) : null}
-        {message ? (
-          <p role="status" className="text-sm text-accent-strong">
-            {message}
-          </p>
-        ) : null}
+        {error ? <Alert tone="error">{error}</Alert> : null}
+        {message ? <Alert tone="success">{message}</Alert> : null}
 
-        <button
-          type="submit"
-          disabled={submitting}
-          className="inline-flex items-center rounded-md bg-accent px-3.5 py-2 text-sm font-semibold text-white hover:bg-accent-strong focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent disabled:opacity-60"
-        >
-          {submitting ? "Saving…" : "Save changes"}
-        </button>
+        <div className="flex flex-wrap gap-2 pt-1">
+          <Button type="submit" variant="primary" disabled={submitting || !dirty}>
+            {submitting ? (
+              <>
+                <LoaderCircle
+                  className="h-4 w-4 animate-spin"
+                  strokeWidth={1.75}
+                  aria-hidden
+                />
+                Saving…
+              </>
+            ) : (
+              "Save changes"
+            )}
+          </Button>
+          <Button
+            type="button"
+            variant="secondary"
+            disabled={submitting || !dirty}
+            onClick={onCancel}
+          >
+            Cancel
+          </Button>
+        </div>
       </form>
     </section>
   );

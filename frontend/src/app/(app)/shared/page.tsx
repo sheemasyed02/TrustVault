@@ -1,5 +1,6 @@
 "use client";
 
+import { Share2 } from "lucide-react";
 import { useMemo, useState } from "react";
 
 import { useAuth } from "@/components/auth-provider";
@@ -13,6 +14,10 @@ import {
   DocumentTableSkeleton,
   PaginationBar,
 } from "@/components/document-table";
+import { Alert } from "@/components/ui/alert";
+import { Button } from "@/components/ui/button";
+import { EmptyState } from "@/components/ui/empty-state";
+import { PageHeader } from "@/components/ui/page-header";
 import { useDocumentActions } from "@/hooks/use-document-actions";
 import { useDocumentList } from "@/hooks/use-document-list";
 
@@ -46,32 +51,26 @@ export default function SharedWithMePage() {
 
   if (!user) return null;
 
+  const hasActiveFilters =
+    Boolean(filters.title) ||
+    Boolean(filters.category) ||
+    Boolean(filters.createdFrom) ||
+    Boolean(filters.createdTo);
+
   return (
     <div className="space-y-5">
-      <header>
-        <p className="text-xs font-semibold uppercase tracking-[0.16em] text-accent-strong">
-          Shared documents
-        </p>
-        <h1 className="mt-1.5 font-display text-2xl tracking-tight sm:text-3xl">
-          Shared with you
-        </h1>
-        <p className="mt-2 max-w-xl text-sm text-muted">
-          Documents others have granted you access to. Your access level is shown
-          on each row.
-        </p>
-      </header>
+      <PageHeader
+        title="Shared with you"
+        description="Documents others have granted you access to. Your access level is shown on each item."
+      />
 
       <DocumentFilters value={filters} onChange={setFilters} />
 
       {actions.actionError ? (
-        <p role="alert" className="text-sm text-danger">
-          {actions.actionError}
-        </p>
+        <Alert tone="error">{actions.actionError}</Alert>
       ) : null}
       {actions.actionMessage ? (
-        <p role="status" className="text-sm text-accent-strong">
-          {actions.actionMessage}
-        </p>
+        <Alert tone="success">{actions.actionMessage}</Alert>
       ) : null}
 
       {list.status === "loading" || list.status === "idle" ? (
@@ -79,28 +78,48 @@ export default function SharedWithMePage() {
       ) : null}
 
       {list.status === "error" ? (
-        <div
-          role="alert"
-          className="rounded-xl border border-danger/30 bg-danger/5 px-4 py-4 text-sm"
+        <Alert
+          tone="error"
+          action={
+            <Button size="sm" variant="secondary" onClick={() => list.refresh()}>
+              Retry
+            </Button>
+          }
         >
-          <p className="text-danger">{list.errorMessage}</p>
-          <button
-            type="button"
-            onClick={() => list.refresh()}
-            className="mt-3 rounded-md border border-border bg-white px-3 py-1.5 text-xs font-semibold"
-          >
-            Retry
-          </button>
-        </div>
+          {list.errorMessage}
+        </Alert>
       ) : null}
 
       {list.status === "empty" ? (
-        <div className="rounded-xl border border-dashed border-border bg-surface px-6 py-10 text-center">
-          <p className="font-medium text-foreground">No shared documents</p>
-          <p className="mt-2 text-sm text-muted">
-            When an owner grants you READ or EDIT access, documents appear here.
-          </p>
-        </div>
+        <EmptyState
+          title={
+            hasActiveFilters ? "No matching shared documents" : "No shared documents"
+          }
+          description={
+            hasActiveFilters
+              ? "Try clearing filters or adjusting your search."
+              : "When an owner grants you READ or EDIT access, documents appear here."
+          }
+          icon={<Share2 className="h-5 w-5" strokeWidth={1.75} />}
+          action={
+            hasActiveFilters ? (
+              <Button
+                size="sm"
+                variant="secondary"
+                onClick={() =>
+                  setFilters({
+                    title: "",
+                    category: "",
+                    createdFrom: "",
+                    createdTo: "",
+                  })
+                }
+              >
+                Clear filters
+              </Button>
+            ) : null
+          }
+        />
       ) : null}
 
       {list.status === "ready" ? (

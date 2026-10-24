@@ -1,8 +1,9 @@
 "use client";
 
+import { FilePlus2, FolderOpen } from "lucide-react";
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import { useEffect, useMemo, useState } from "react";
 
 import { useAuth } from "@/components/auth-provider";
 import { ConfirmDialog } from "@/components/confirm-dialog";
@@ -16,7 +17,10 @@ import {
   DocumentTableSkeleton,
   PaginationBar,
 } from "@/components/document-table";
-import { buttonClassName } from "@/components/ui/button";
+import { Alert } from "@/components/ui/alert";
+import { Button, buttonClassName } from "@/components/ui/button";
+import { EmptyState } from "@/components/ui/empty-state";
+import { PageHeader } from "@/components/ui/page-header";
 import { useDocumentActions } from "@/hooks/use-document-actions";
 import { useDocumentList } from "@/hooks/use-document-list";
 import { getPostLoginPath } from "@/lib/nav";
@@ -60,49 +64,45 @@ export default function MyDocumentsPage() {
   if (user.role === "VIEWER") {
     return (
       <p className="text-sm text-muted" role="status">
-        Redirecting to shared documents…
+        Redirecting to shared documents?
       </p>
     );
   }
 
+  const hasActiveFilters =
+    Boolean(filters.title) ||
+    Boolean(filters.category) ||
+    Boolean(filters.createdFrom) ||
+    Boolean(filters.createdTo);
+
   return (
     <div className="space-y-5">
-      <header className="flex flex-wrap items-center justify-between gap-3">
-        <div className="min-w-0 max-w-2xl">
-          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-accent-strong">
-            My Documents
-          </p>
-          <h1 className="mt-1.5 font-display text-2xl tracking-tight sm:text-3xl">
-            Documents you own
-          </h1>
-          <p className="mt-2 max-w-xl text-sm text-muted">
-            Search and open files you uploaded. Share access from each document.
-          </p>
-        </div>
-        {user.role === "OWNER" ? (
-          <Link
-            href="/documents/upload"
-            className={buttonClassName({
-              variant: "primary",
-              className: "shrink-0 self-center",
-            })}
-          >
-            Upload
-          </Link>
-        ) : null}
-      </header>
+      <PageHeader
+        title="My documents"
+        description="Search and open files you uploaded. Share access from each document."
+        actions={
+          user.role === "OWNER" ? (
+            <Link
+              href="/documents/upload"
+              className={buttonClassName({
+                variant: "primary",
+                className: "shrink-0",
+              })}
+            >
+              <FilePlus2 className="h-4 w-4" strokeWidth={1.75} aria-hidden />
+              Upload document
+            </Link>
+          ) : null
+        }
+      />
 
       <DocumentFilters value={filters} onChange={setFilters} />
 
       {actions.actionError ? (
-        <p role="alert" className="text-sm text-danger">
-          {actions.actionError}
-        </p>
+        <Alert tone="error">{actions.actionError}</Alert>
       ) : null}
       {actions.actionMessage ? (
-        <p role="status" className="text-sm text-accent-strong">
-          {actions.actionMessage}
-        </p>
+        <Alert tone="success">{actions.actionMessage}</Alert>
       ) : null}
 
       {list.status === "loading" || list.status === "idle" ? (
@@ -110,36 +110,53 @@ export default function MyDocumentsPage() {
       ) : null}
 
       {list.status === "error" ? (
-        <div
-          role="alert"
-          className="rounded-xl border border-danger/30 bg-danger/5 px-4 py-4 text-sm"
+        <Alert
+          tone="error"
+          action={
+            <Button size="sm" variant="secondary" onClick={() => list.refresh()}>
+              Retry
+            </Button>
+          }
         >
-          <p className="text-danger">{list.errorMessage}</p>
-          <button
-            type="button"
-            onClick={() => list.refresh()}
-            className="mt-3 rounded-md border border-border bg-white px-3 py-1.5 text-xs font-semibold"
-          >
-            Retry
-          </button>
-        </div>
+          {list.errorMessage}
+        </Alert>
       ) : null}
 
       {list.status === "empty" ? (
-        <div className="rounded-xl border border-dashed border-border bg-surface px-6 py-10 text-center shadow-[var(--shadow-sm)]">
-          <p className="font-medium text-foreground">No documents yet</p>
-          <p className="mt-2 text-sm text-muted">
-            Upload a DOCX file to create your first document.
-          </p>
-          {user.role === "OWNER" ? (
-            <Link
-              href="/documents/upload"
-              className="mt-4 inline-block text-sm font-semibold text-accent-strong hover:underline"
-            >
-              Upload a document
-            </Link>
-          ) : null}
-        </div>
+        <EmptyState
+          title={hasActiveFilters ? "No matching documents" : "No documents yet"}
+          description={
+            hasActiveFilters
+              ? "Try clearing filters or adjusting your search."
+              : "Upload a DOCX file to create your first document."
+          }
+          icon={<FolderOpen className="h-5 w-5" strokeWidth={1.75} />}
+          action={
+            hasActiveFilters ? (
+              <Button
+                size="sm"
+                variant="secondary"
+                onClick={() =>
+                  setFilters({
+                    title: "",
+                    category: "",
+                    createdFrom: "",
+                    createdTo: "",
+                  })
+                }
+              >
+                Clear filters
+              </Button>
+            ) : user.role === "OWNER" ? (
+              <Link
+                href="/documents/upload"
+                className={buttonClassName({ variant: "primary" })}
+              >
+                Upload document
+              </Link>
+            ) : null
+          }
+        />
       ) : null}
 
       {list.status === "ready" ? (

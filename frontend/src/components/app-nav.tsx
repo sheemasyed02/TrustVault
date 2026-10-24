@@ -3,8 +3,10 @@
 import Link from "next/link";
 
 import { useAuth } from "@/components/auth-provider";
+import { Button } from "@/components/ui/button";
 import { getNavItemsForRole } from "@/lib/nav";
 
+/** Compact horizontal nav (legacy). Primary navigation lives in AppShell. */
 export function AppNav() {
   const { user, logout } = useAuth();
   if (!user) return null;
@@ -19,7 +21,7 @@ export function AppNav() {
             <Link
               key={item.label}
               href={item.href}
-              className="rounded-md px-2.5 py-1.5 text-sm font-medium text-foreground hover:bg-accent-soft focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+              className="rounded-[0.5rem] px-2.5 py-1.5 text-sm font-medium text-foreground transition-colors duration-[180ms] hover:bg-accent-soft focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
             >
               {item.label}
             </Link>
@@ -27,7 +29,7 @@ export function AppNav() {
             <span
               key={item.label}
               title="Coming in a later task"
-              className="cursor-default rounded-md px-2.5 py-1.5 text-sm text-muted"
+              className="cursor-default rounded-[0.5rem] px-2.5 py-1.5 text-sm text-muted"
             >
               {item.label}
             </span>
@@ -40,13 +42,9 @@ export function AppNav() {
         <span className="mx-1.5 text-border">·</span>
         <span>{user.role}</span>
       </p>
-      <button
-        type="button"
-        onClick={() => logout()}
-        className="rounded-md border border-border bg-white px-3 py-1.5 text-xs font-semibold text-foreground hover:bg-accent-soft focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent sm:text-sm"
-      >
+      <Button size="sm" variant="secondary" onClick={() => logout()}>
         Sign out
-      </button>
+      </Button>
     </div>
   );
 }

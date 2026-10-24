@@ -1,9 +1,15 @@
 "use client";
 
+import { Eye, EyeOff, KeyRound, UserRound } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useId, useState, type FormEvent } from "react";
 
 import { useAuth, useHandleUnauthorized } from "@/components/auth-provider";
+import { Alert } from "@/components/ui/alert";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { PageHeader, SectionHeading } from "@/components/ui/page-header";
+import { Panel } from "@/components/ui/panel";
 import {
   ApiError,
   changePasswordRequest,
@@ -30,16 +36,22 @@ function PasswordField({
 }) {
   const [visible, setVisible] = useState(false);
   return (
-    <div className="space-y-2">
+    <div className="space-y-1.5">
       <div className="flex items-center justify-between gap-2">
-        <label htmlFor={id} className="block text-sm font-medium">
+        <label htmlFor={id} className="tv-label mb-0">
           {label}
         </label>
         <button
           type="button"
-          className="text-xs font-semibold text-accent-strong hover:underline"
+          className="inline-flex items-center gap-1 text-xs font-semibold text-accent-strong hover:underline"
           onClick={() => setVisible((v) => !v)}
+          aria-pressed={visible}
         >
+          {visible ? (
+            <EyeOff className="h-3.5 w-3.5" strokeWidth={1.75} aria-hidden />
+          ) : (
+            <Eye className="h-3.5 w-3.5" strokeWidth={1.75} aria-hidden />
+          )}
           {visible ? "Hide" : "Show"}
         </button>
       </div>
@@ -52,11 +64,18 @@ function PasswordField({
         value={value}
         disabled={disabled}
         onChange={(e) => onChange(e.target.value)}
-        className="w-full rounded-md border border-border bg-white px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-accent/40 disabled:opacity-70"
+        className="tv-input"
       />
       {hint ? <p className="text-xs text-muted">{hint}</p> : null}
     </div>
   );
+}
+
+function RoleBadge({ role }: { role: string }) {
+  const upper = role.toUpperCase();
+  if (upper === "ADMIN") return <Badge tone="accent">Admin</Badge>;
+  if (upper === "OWNER") return <Badge tone="warning">Owner</Badge>;
+  return <Badge tone="neutral">{upper === "VIEWER" ? "Viewer" : role}</Badge>;
 }
 
 export default function ProfilePage() {
@@ -151,46 +170,51 @@ export default function ProfilePage() {
 
   return (
     <div className="space-y-5">
-      <header>
-        <p className="text-sm font-semibold uppercase tracking-[0.18em] text-accent-strong">
-          Account
-        </p>
-        <h1 className="mt-2 font-display text-3xl tracking-tight text-foreground">
-          Profile
-        </h1>
-        <p className="mt-2 max-w-2xl text-sm text-muted">
-          Your personal details from the authenticated session. You cannot change
-          your role or account status here.
-        </p>
-      </header>
+      <PageHeader
+        title="Profile"
+        description="Your personal details from the authenticated session. Role and account status are managed by administrators."
+      />
 
-      <section className="rounded-xl border border-border bg-surface p-5 shadow-[var(--shadow)]">
-        <h2 className="font-display text-xl text-foreground">
-          Personal information
-        </h2>
-        <dl className="mt-4 grid gap-4 sm:grid-cols-2">
-          <div>
+      <Panel>
+        <SectionHeading
+          title="Account"
+          description="Details returned by the current-user API."
+          actions={
+            <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-accent-soft text-accent-strong">
+              <UserRound className="h-4 w-4" strokeWidth={1.75} aria-hidden />
+            </span>
+          }
+        />
+
+        <dl className="mt-5 grid gap-4 sm:grid-cols-2">
+          <div className="rounded-[0.75rem] border border-border bg-accent-soft/40 px-4 py-3">
             <dt className="text-xs uppercase tracking-wide text-muted">Email</dt>
-            <dd className="mt-1 break-all text-sm text-foreground">{user.email}</dd>
+            <dd className="mt-1 break-all text-sm font-medium text-foreground">
+              {user.email}
+            </dd>
             <p className="mt-1 text-xs text-muted">
-              Email is your login identity and cannot be changed here.
+              Login identity cannot be changed here.
             </p>
           </div>
-          <div>
+          <div className="rounded-[0.75rem] border border-border bg-accent-soft/40 px-4 py-3">
             <dt className="text-xs uppercase tracking-wide text-muted">Role</dt>
-            <dd className="mt-1 text-sm font-semibold text-accent-strong">
-              {user.role}
+            <dd className="mt-2">
+              <RoleBadge role={user.role} />
             </dd>
           </div>
-          <div>
+          <div className="rounded-[0.75rem] border border-border bg-accent-soft/40 px-4 py-3">
             <dt className="text-xs uppercase tracking-wide text-muted">
               Account status
             </dt>
-            <dd className="mt-1 text-sm text-foreground">
-              {user.is_active ? "Active" : "Inactive"}
+            <dd className="mt-2">
+              {user.is_active ? (
+                <Badge tone="success">Active</Badge>
+              ) : (
+                <Badge tone="danger">Inactive</Badge>
+              )}
             </dd>
           </div>
-          <div>
+          <div className="rounded-[0.75rem] border border-border bg-accent-soft/40 px-4 py-3">
             <dt className="text-xs uppercase tracking-wide text-muted">
               Registered
             </dt>
@@ -205,8 +229,8 @@ export default function ProfilePage() {
           className="mt-6 space-y-4 border-t border-border pt-5"
           noValidate
         >
-          <label htmlFor={nameId} className="block text-sm">
-            <span className="mb-1 block font-medium">Full name</span>
+          <label htmlFor={nameId} className="block max-w-md text-sm">
+            <span className="tv-label">Full name</span>
             <input
               id={nameId}
               name="name"
@@ -216,35 +240,33 @@ export default function ProfilePage() {
               minLength={2}
               maxLength={255}
               disabled={profileBusy}
-              className="w-full max-w-md rounded-md border border-border bg-white px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-accent/40 disabled:opacity-70"
+              className="tv-input"
             />
           </label>
-          {profileError ? (
-            <p role="alert" className="text-sm text-danger">
-              {profileError}
-            </p>
-          ) : null}
+          {profileError ? <Alert tone="error">{profileError}</Alert> : null}
           {profileMessage ? (
-            <p role="status" className="text-sm text-accent-strong">
-              {profileMessage}
-            </p>
+            <Alert tone="success">{profileMessage}</Alert>
           ) : null}
-          <button
+          <Button
             type="submit"
+            variant="primary"
             disabled={profileBusy || name.trim() === user.name}
-            className="rounded-md bg-accent px-4 py-2 text-sm font-semibold text-white hover:bg-accent-strong disabled:opacity-60"
           >
-            {profileBusy ? "Saving…" : "Save name"}
-          </button>
+            {profileBusy ? "Saving..." : "Save name"}
+          </Button>
         </form>
-      </section>
+      </Panel>
 
-      <section className="rounded-xl border border-border bg-surface p-5 shadow-[var(--shadow)]">
-        <h2 className="font-display text-xl text-foreground">Security</h2>
-        <p className="mt-1 text-sm text-muted">
-          Change your password. After a successful change you will be signed out
-          so you can sign in with the new password.
-        </p>
+      <Panel>
+        <SectionHeading
+          title="Change password"
+          description="After a successful change you will be signed out so you can sign in with the new password."
+          actions={
+            <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-accent-soft text-accent-strong">
+              <KeyRound className="h-4 w-4" strokeWidth={1.75} aria-hidden />
+            </span>
+          }
+        />
         <form
           onSubmit={(e) => void onChangePassword(e)}
           className="mt-5 max-w-md space-y-4"
@@ -275,20 +297,12 @@ export default function ProfilePage() {
             autoComplete="new-password"
             disabled={passwordBusy}
           />
-          {passwordError ? (
-            <p role="alert" className="text-sm text-danger">
-              {passwordError}
-            </p>
-          ) : null}
-          <button
-            type="submit"
-            disabled={passwordBusy}
-            className="rounded-md bg-accent px-4 py-2 text-sm font-semibold text-white hover:bg-accent-strong disabled:opacity-60"
-          >
-            {passwordBusy ? "Updating…" : "Change password"}
-          </button>
+          {passwordError ? <Alert tone="error">{passwordError}</Alert> : null}
+          <Button type="submit" variant="primary" disabled={passwordBusy}>
+            {passwordBusy ? "Updating..." : "Change password"}
+          </Button>
         </form>
-      </section>
+      </Panel>
     </div>
   );
 }

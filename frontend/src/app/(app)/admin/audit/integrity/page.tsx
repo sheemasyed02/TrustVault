@@ -1,9 +1,15 @@
 "use client";
 
+import { AlertTriangle, RefreshCw, ShieldCheck, ShieldQuestion } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
 
 import { useAuth, useHandleUnauthorized } from "@/components/auth-provider";
+import { Alert } from "@/components/ui/alert";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { PageHeader } from "@/components/ui/page-header";
+import { Panel } from "@/components/ui/panel";
 import {
   ApiError,
   verifyAuditIntegrityRequest,
@@ -48,6 +54,7 @@ export default function AdminAuditIntegrityPage() {
 
   const neverRun = status === "idle" && !result;
   const failedRequest = status === "error";
+  const isRunning = status === "running";
 
   return (
     <div className="space-y-5">
@@ -58,17 +65,13 @@ export default function AdminAuditIntegrityPage() {
         ← Admin dashboard
       </Link>
 
-      <header className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <p className="text-sm font-semibold uppercase tracking-[0.18em] text-accent-strong">
-            Administration
-          </p>
-          <h1 className="mt-2 font-display text-3xl tracking-tight text-foreground">
-            Audit integrity
-          </h1>
-          <p className="mt-2 max-w-2xl text-sm text-muted">
-            Answers: are persisted audit records passing the application&apos;s
-            hash-chain checks? This page does not list individual events — use{" "}
+      <PageHeader
+        title="Audit integrity"
+        description={
+          <>
+            Checks whether persisted audit records pass the application&apos;s
+            hash-chain verification. This page does not list individual events —
+            use{" "}
             <Link
               href="/admin/audit"
               className="font-semibold text-accent-strong underline"
@@ -76,69 +79,115 @@ export default function AdminAuditIntegrityPage() {
               Audit Logs
             </Link>{" "}
             for that. A same-database hash chain is not tamper-proof against a
-            privileged DBA who can rewrite records and hashes together.
-          </p>
-        </div>
-        <button
-          type="button"
-          onClick={() => void onVerify()}
-          disabled={status === "running"}
-          className="rounded-md bg-accent px-4 py-2 text-sm font-semibold text-white hover:bg-accent-strong disabled:opacity-60"
-        >
-          {status === "running" ? "Verifying…" : "Run integrity check"}
-        </button>
-      </header>
+            privileged operator who can rewrite records and hashes together.
+          </>
+        }
+        actions={
+          <Button
+            type="button"
+            variant="primary"
+            onClick={() => void onVerify()}
+            disabled={isRunning}
+            aria-busy={isRunning}
+          >
+            {isRunning ? (
+              <>
+                <RefreshCw
+                  className="h-3.5 w-3.5 animate-spin"
+                  strokeWidth={1.75}
+                  aria-hidden
+                />
+                Verifying...
+              </>
+            ) : (
+              <>
+                <ShieldCheck className="h-3.5 w-3.5" strokeWidth={1.75} aria-hidden />
+                Run integrity check
+              </>
+            )}
+          </Button>
+        }
+      />
 
       {neverRun ? (
         <section
-          className="rounded-xl border border-dashed border-border bg-surface px-6 py-10 text-center shadow-[var(--shadow)]"
+          className="rounded-[var(--radius)] border border-dashed border-border bg-surface px-6 py-10 text-center shadow-[var(--shadow-sm)]"
           role="status"
         >
-          <p className="font-medium text-foreground">No check has run yet</p>
+          <span className="mx-auto flex h-11 w-11 items-center justify-center rounded-xl bg-accent-soft text-accent-strong">
+            <ShieldQuestion className="h-5 w-5" strokeWidth={1.75} aria-hidden />
+          </span>
+          <p className="mt-3 font-semibold text-foreground">Not verified yet</p>
           <p className="mt-2 text-sm text-muted">
-            Run the integrity check to verify previous_hash links and recalculated
-            event hashes for the current audit chain.
+            No check has run yet. Run the integrity check to verify previous_hash
+            links and recalculated event hashes for the current audit chain.
           </p>
+          <Badge tone="neutral" className="mt-4">
+            Pending verification
+          </Badge>
         </section>
       ) : null}
 
       {failedRequest ? (
-        <div
-          role="alert"
-          className="rounded-xl border border-danger/30 bg-danger/5 px-4 py-4 text-sm text-danger"
-        >
-          <p className="font-semibold">Verification could not complete</p>
-          <p className="mt-1">{error}</p>
-        </div>
+        <Alert tone="error" title="Verification could not complete">
+          {error}
+        </Alert>
       ) : null}
 
       {result ? (
-        <section
-          className={`rounded-xl border px-5 py-5 shadow-[var(--shadow)] ${
+        <Panel
+          className={
             result.valid
-              ? "border-accent/30 bg-accent-soft/40"
-              : "border-danger/30 bg-danger/5"
-          }`}
-          role="status"
+              ? "border-success/30 bg-[color-mix(in_srgb,var(--success)_6%,white)]"
+              : "border-danger/30 bg-[color-mix(in_srgb,var(--danger)_6%,white)]"
+          }
         >
-          <p className="text-xs font-semibold uppercase tracking-wide text-muted">
-            Integrity status
-          </p>
-          <h2
-            className={`mt-1 font-display text-2xl ${
-              result.valid ? "text-accent-strong" : "text-danger"
-            }`}
-          >
-            {result.valid ? "Check passed" : "Check failed"}
-          </h2>
-          <p className="mt-2 text-sm text-foreground">{result.detail}</p>
-          {result.reason_code ? (
-            <p className="mt-1 text-xs text-muted">
-              Reason code: {result.reason_code}
-            </p>
-          ) : null}
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wide text-muted">
+                Integrity status
+              </p>
+              <h2
+                className={`mt-1 flex items-center gap-2 text-2xl font-semibold tracking-tight ${
+                  result.valid ? "text-success" : "text-danger"
+                }`}
+              >
+                {result.valid ? (
+                  <ShieldCheck className="h-6 w-6" strokeWidth={1.75} aria-hidden />
+                ) : (
+                  <AlertTriangle className="h-6 w-6" strokeWidth={1.75} aria-hidden />
+                )}
+                {result.valid ? "Check passed" : "Check failed"}
+              </h2>
+            </div>
+            <Badge tone={result.valid ? "success" : "danger"}>
+              {result.valid ? "Passed" : "Failed"}
+            </Badge>
+          </div>
 
-          <dl className="mt-5 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="mt-4">
+            {!result.valid ? (
+              <Alert tone="warning" title="Chain verification warning">
+                {result.detail}
+                {result.reason_code ? (
+                  <span className="mt-1 block text-xs">
+                    Reason code: {result.reason_code}
+                  </span>
+                ) : null}
+              </Alert>
+            ) : (
+              <p className="text-sm text-foreground" role="status">
+                {result.detail}
+                {result.reason_code ? (
+                  <span className="mt-1 block text-xs text-muted">
+                    Reason code: {result.reason_code}
+                  </span>
+                ) : null}
+              </p>
+            )}
+          </div>
+
+          <dl className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             <Metric label="Events in chain" value={String(result.event_count)} />
             <Metric
               label="Events checked"
@@ -163,7 +212,12 @@ export default function AdminAuditIntegrityPage() {
               First failing event id: {result.first_failure_event_id}
             </p>
           ) : null}
-        </section>
+
+          <p className="mt-5 text-xs leading-5 text-muted">
+            A successful check means the stored chain matched the verifier at this
+            moment. It does not prove the audit log is impossible to tamper with.
+          </p>
+        </Panel>
       ) : null}
     </div>
   );
@@ -171,7 +225,7 @@ export default function AdminAuditIntegrityPage() {
 
 function Metric({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-lg border border-border/70 bg-surface/80 px-3 py-3">
+    <div className="rounded-[0.75rem] border border-border bg-surface px-3 py-3">
       <dt className="text-xs uppercase tracking-wide text-muted">{label}</dt>
       <dd className="mt-1 text-sm font-semibold text-foreground">{value}</dd>
     </div>
