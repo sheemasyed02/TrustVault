@@ -145,9 +145,7 @@ To test forgot email, the email must be valid and real one.
 
 Additional seeded emails (same role passwords as above when seeded): owners `raj@` / `priya@`; viewers `alex@` / `jordan@` (`@trustvault.demo`).
 
-> **Before publishing this README for judges:** replace the three `[ADD … PASSWORD]` placeholders with the passwords you intentionally use for public demo only. Never put personal or production-only credentials here.
 
-If those accounts are not seeded on the live database, seed them against the deploy DB with the seed CLI (or prepare equivalent demo users) before judging. This documentation task does not create or modify live users.
 
 ### Demo walkthrough
 
