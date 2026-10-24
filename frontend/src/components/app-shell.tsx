@@ -140,7 +140,7 @@ function SidebarBody({
         />
         {!collapsed ? (
           <div className="min-w-0 flex-1">
-            <p className="truncate text-base font-semibold tracking-tight text-sidebar-text">
+            <p className="truncate font-accent text-base font-semibold tracking-tight text-sidebar-text">
               TrustVault
             </p>
             <p className="mt-0.5 truncate font-accent text-xs text-gold">
@@ -353,7 +353,7 @@ function AppHeader({
             </nav>
           ) : null}
           <div className="flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-0.5">
-            <h1 className="truncate text-base font-semibold tracking-tight text-foreground sm:text-lg">
+            <h1 className="truncate font-accent text-base font-semibold tracking-tight text-foreground sm:text-lg">
               {meta.title}
             </h1>
             {meta.subtitle ? (

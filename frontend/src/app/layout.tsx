@@ -3,6 +3,7 @@ import type { Metadata } from "next";
 import { Providers } from "@/components/providers";
 import { SiteFooter } from "@/components/site-footer";
 import { SiteHeader } from "@/components/site-header";
+import { LOGO_SRC } from "@/lib/brand-assets";
 
 import "./globals.css";
 
@@ -14,8 +15,9 @@ export const metadata: Metadata = {
   description:
     "Secure document sharing with server-side access control and an auditable activity trail.",
   icons: {
-    icon: [{ url: "/logo.png", type: "image/png" }],
-    apple: [{ url: "/logo.png", type: "image/png" }],
+    icon: [{ url: LOGO_SRC, type: "image/png" }],
+    shortcut: LOGO_SRC,
+    apple: [{ url: LOGO_SRC, type: "image/png" }],
   },
 };
 

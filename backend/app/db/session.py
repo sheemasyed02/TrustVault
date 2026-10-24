@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import sys
 from collections.abc import Generator
+from typing import Any
 
 from sqlalchemy import create_engine, text
 from sqlalchemy.engine import Engine
@@ -15,22 +16,44 @@ from app.core.config import get_settings
 _engine: Engine | None = None
 _SessionLocal: sessionmaker[Session] | None = None
 
+# Neon (and similar hosted Postgres) can take well over 10s on a cold path.
+# A 15s connect_timeout caused intermittent ConnectionTimeout failures in
+# get_current_user, so protected routes returned 500 and the UI showed no data.
+_APP_CONNECT_TIMEOUT_SECONDS = 60
+_TEST_CONNECT_TIMEOUT_SECONDS = 15
+
+
+def build_engine_kwargs(*, for_pytest: bool) -> dict[str, Any]:
+    """Build SQLAlchemy create_engine kwargs (no secrets; safe to unit-test)."""
+    engine_kwargs: dict[str, Any] = {"pool_pre_ping": True}
+    if for_pytest:
+        # Pytest resets the engine often; NullPool avoids exhausting Postgres
+        # max_connections across a large suite. Short connect_timeout fails
+        # fast on DNS/network errors instead of multi-minute hangs.
+        engine_kwargs["poolclass"] = NullPool
+        engine_kwargs["connect_args"] = {
+            "connect_timeout": _TEST_CONNECT_TIMEOUT_SECONDS,
+        }
+    else:
+        engine_kwargs["pool_size"] = 5
+        engine_kwargs["max_overflow"] = 10
+        # Recycle before typical idle proxy drops; keepalives reduce stale sockets.
+        engine_kwargs["pool_recycle"] = 280
+        engine_kwargs["connect_args"] = {
+            "connect_timeout": _APP_CONNECT_TIMEOUT_SECONDS,
+            "keepalives": 1,
+            "keepalives_idle": 30,
+            "keepalives_interval": 10,
+            "keepalives_count": 5,
+        }
+    return engine_kwargs
+
 
 def get_engine() -> Engine:
     global _engine, _SessionLocal
     if _engine is None:
         settings = get_settings()
-        # Pytest resets the engine often; NullPool avoids exhausting Postgres
-        # max_connections across a large suite. Short connect_timeout fails
-        # fast on DNS/network errors instead of multi-minute hangs.
-        engine_kwargs: dict = {"pool_pre_ping": True}
-        if "pytest" in sys.modules:
-            engine_kwargs["poolclass"] = NullPool
-            engine_kwargs["connect_args"] = {"connect_timeout": 15}
-        else:
-            engine_kwargs["pool_size"] = 5
-            engine_kwargs["max_overflow"] = 10
-            engine_kwargs["connect_args"] = {"connect_timeout": 15}
+        engine_kwargs = build_engine_kwargs(for_pytest="pytest" in sys.modules)
         _engine = create_engine(settings.database_url, **engine_kwargs)
         _SessionLocal = sessionmaker(
             bind=_engine,

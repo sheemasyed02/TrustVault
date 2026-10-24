@@ -181,17 +181,15 @@ export default function AdminUsersPage() {
         <label className="text-sm sm:col-span-2">
           <span className="tv-label">Search name or email</span>
           <span className="relative block">
-            <Search
-              className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted"
-              strokeWidth={1.75}
-              aria-hidden
-            />
+            <span className="tv-input-icon-slot tv-input-icon-slot--leading" aria-hidden>
+              <Search className="h-4 w-4" strokeWidth={1.75} />
+            </span>
             <input
               value={filters.q}
               onChange={(e) =>
                 setFilters((prev) => ({ ...prev, q: e.target.value }))
               }
-              className="tv-input pl-9"
+              className="tv-input tv-input-with-leading-icon"
               placeholder="e.g. jane@company.com"
             />
           </span>

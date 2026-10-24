@@ -5,7 +5,10 @@ interface PageHeaderProps {
   title: ReactNode;
   description?: ReactNode;
   actions?: ReactNode;
-  /** Use Merienda only for welcoming greetings — not for data titles. */
+  /**
+   * Prefer Merienda for page titles (default). Set false for dense data screens
+   * where a display face hurts scanability.
+   */
   accentTitle?: boolean;
 }
 
@@ -14,7 +17,7 @@ export function PageHeader({
   title,
   description,
   actions,
-  accentTitle = false,
+  accentTitle = true,
 }: PageHeaderProps) {
   return (
     <header className="flex flex-wrap items-start justify-between gap-4">
@@ -26,7 +29,7 @@ export function PageHeader({
         ) : null}
         <h1
           className={`mt-1.5 text-2xl font-semibold tracking-tight text-foreground sm:text-3xl ${
-            accentTitle ? "font-accent font-semibold" : "font-sans"
+            accentTitle ? "font-accent" : "font-sans"
           }`}
         >
           {title}
@@ -58,7 +61,7 @@ export function SectionHeading({
   return (
     <div className="flex flex-wrap items-center justify-between gap-3">
       <div className="min-w-0">
-        <h2 className="text-lg font-semibold tracking-tight text-foreground">
+        <h2 className="font-accent text-lg font-semibold tracking-tight text-foreground">
           {title}
         </h2>
         {description ? (

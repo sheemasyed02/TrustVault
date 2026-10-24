@@ -95,13 +95,47 @@ body {
   border-radius: var(--radius-control);
   border: 1px solid var(--border);
   background: var(--surface);
-  padding: 0.55rem 0.8rem;
+  padding: 0.65rem 0.9rem;
   font-size: 0.875rem;
   line-height: 1.25rem;
   color: var(--foreground);
   transition:
     border-color var(--transition),
     box-shadow var(--transition);
+}
+
+/* Reserved gutters so leading/trailing icons never cover value or placeholder. */
+.tv-input-with-leading-icon {
+  padding-left: 2.75rem;
+}
+
+.tv-input-with-trailing-icon {
+  padding-right: 2.75rem;
+}
+
+.tv-input-with-leading-icon.tv-input-with-trailing-icon {
+  padding-left: 2.75rem;
+  padding-right: 2.75rem;
+}
+
+.tv-input-icon-slot {
+  pointer-events: none;
+  position: absolute;
+  inset-block: 0;
+  display: flex;
+  width: 2.75rem;
+  align-items: center;
+  justify-content: center;
+  color: var(--muted);
+}
+
+.tv-input-icon-slot--leading {
+  left: 0;
+}
+
+.tv-input-icon-slot--trailing {
+  right: 0;
+  pointer-events: auto;
 }
 
 .tv-input::placeholder {

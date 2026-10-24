@@ -102,7 +102,7 @@ export function DocumentMetadataForm({
       aria-label="Edit metadata"
       className="rounded-[var(--radius)] border border-border bg-surface p-5 shadow-[var(--shadow-sm)] sm:p-6"
     >
-      <h2 className="text-lg font-semibold tracking-tight text-foreground">
+      <h2 className="font-accent text-lg font-semibold tracking-tight text-foreground">
         Edit details
       </h2>
       <p className="mt-1 text-sm text-muted">

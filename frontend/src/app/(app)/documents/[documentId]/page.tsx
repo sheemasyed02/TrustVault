@@ -162,7 +162,7 @@ export default function DocumentDetailPage() {
                   <FileTypeIcon mime={doc.mime_type} className="h-6 w-6" />
                 </span>
                 <div className="min-w-0">
-                  <h1 className="text-2xl font-semibold tracking-tight text-foreground">
+                  <h1 className="font-accent text-2xl font-semibold tracking-tight text-foreground">
                     {doc.title}
                   </h1>
                   <p className="mt-1 text-sm text-muted">

@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 420 360" fill="none" role="img" aria-labelledby="authHeroTitle">
+  <title id="authHeroTitle">Secure document folder</title>
+  <ellipse cx="210" cy="318" rx="120" ry="18" fill="#8B78A6" opacity="0.14"/>
+  <path d="M78 118c0-14 11-26 26-26h72l22 22h118c14 0 26 12 26 26v148c0 14-12 26-26 26H104c-14 0-26-12-26-26V118z" fill="#E8E0EF"/>
+  <path d="M78 146h264v142c0 14-12 26-26 26H104c-14 0-26-12-26-26V146z" fill="#F8F5FA"/>
+  <path d="M104 92h68l20 20h124c12 0 22 10 22 22v12H82v-12c0-12 10-22 22-22z" fill="#8B78A6"/>
+  <path d="M104 92h68l20 20H104V92z" fill="#6F5A88"/>
+  <rect x="168" y="168" width="84" height="98" rx="14" fill="#30283B"/>
+  <path d="M190 204a20 20 0 0 1 40 0v12h-40v-12z" stroke="#C5A568" stroke-width="6" stroke-linecap="round"/>
+  <rect x="186" y="214" width="48" height="36" rx="8" fill="#C5A568"/>
+  <circle cx="210" cy="232" r="5" fill="#30283B"/>
+  <path d="M54 250c18-6 28 10 42 4 10-4 14-16 28-14" stroke="#8B78A6" stroke-width="3" stroke-linecap="round" opacity="0.55"/>
+  <path d="M318 246c16 8 28-6 44 2 12 6 18 16 30 12" stroke="#8B78A6" stroke-width="3" stroke-linecap="round" opacity="0.45"/>
+  <circle cx="72" cy="228" r="5" fill="#8B78A6" opacity="0.45"/>
+  <circle cx="348" cy="220" r="6" fill="#8B78A6" opacity="0.35"/>
+  <path d="M60 236c8 2 12 10 20 8" stroke="#6F5A88" stroke-width="2.5" stroke-linecap="round" opacity="0.5"/>
+  <path d="M340 232c10-4 16 6 24 4" stroke="#6F5A88" stroke-width="2.5" stroke-linecap="round" opacity="0.45"/>
+</svg>

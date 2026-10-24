@@ -130,11 +130,9 @@ export function UserSearchPicker({
         Find recipient
       </label>
       <div className="relative">
-        <Search
-          className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted"
-          strokeWidth={1.75}
-          aria-hidden
-        />
+        <span className="tv-input-icon-slot tv-input-icon-slot--leading" aria-hidden>
+          <Search className="h-4 w-4" strokeWidth={1.75} />
+        </span>
         <input
           id={inputId}
           value={query}
@@ -144,7 +142,7 @@ export function UserSearchPicker({
           disabled={disabled}
           aria-controls={listId}
           aria-expanded={status === "ready" && results.length > 0}
-          className="tv-input pl-9 disabled:opacity-60"
+          className="tv-input tv-input-with-leading-icon disabled:opacity-60"
         />
       </div>
       <p className="text-xs text-muted">

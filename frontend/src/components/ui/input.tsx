@@ -38,7 +38,7 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
         <div className="relative">
           {leadingIcon ? (
             <span
-              className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3 text-muted"
+              className="tv-input-icon-slot tv-input-icon-slot--leading"
               aria-hidden
             >
               {leadingIcon}
@@ -50,7 +50,7 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
             disabled={disabled}
             aria-invalid={error ? true : undefined}
             aria-describedby={describedBy}
-            className={`tv-input ${leadingIcon ? "pl-9" : ""} ${className}`.trim()}
+            className={`tv-input ${leadingIcon ? "tv-input-with-leading-icon" : ""} ${className}`.trim()}
             {...rest}
           />
         </div>

@@ -1,5 +1,7 @@
 import Image from "next/image";
 
+import { LOGO_SRC } from "@/lib/brand-assets";
+
 const SIZE_PX = {
   sm: 28,
   md: 40,
@@ -29,11 +31,12 @@ export function BrandLogo({
 
   return (
     <Image
-      src="/logo.png"
+      src={LOGO_SRC}
       alt={decorative ? "" : "TrustVault"}
       width={px}
       height={px}
       priority={priority}
+      unoptimized
       className={`shrink-0 object-contain ${className}`.trim()}
       style={{ width: px, height: px }}
       aria-hidden={decorative ? true : undefined}

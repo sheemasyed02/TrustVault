@@ -1,13 +1,14 @@
 "use client";
 
-import { LoaderCircle, Mail, UserRound } from "lucide-react";
+import { LoaderCircle, Mail, UserPlus, UserRound } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useId, useState, type FormEvent } from "react";
 
 import { AuthPasswordField } from "@/components/auth-password-field";
 import { AuthSplitLayout } from "@/components/auth-split-layout";
-import { Button } from "@/components/ui/button";
+import { AuthTextField } from "@/components/auth-text-field";
+import { Button, buttonClassName } from "@/components/ui/button";
 import { ApiError, registerRequest } from "@/lib/api";
 
 export default function SignupPage() {
@@ -80,79 +81,52 @@ export default function SignupPage() {
 
   return (
     <AuthSplitLayout
-      welcome="Join as a Viewer."
-      support="Registration creates a Viewer account. Owner and Administrator roles are assigned by TrustVault administrators."
+      welcome="Your data. Your control."
+      support="Accessed only by the right people."
       marketingLabel="TrustVault sign-up"
     >
-      <section
-        aria-labelledby="sign-up-heading"
-        className="rounded-[var(--radius)] border border-border bg-surface p-6 shadow-[var(--shadow)] sm:p-8"
-      >
+      <section aria-labelledby="sign-up-heading" className="w-full">
         <h1
           id="sign-up-heading"
-          className="text-2xl font-semibold tracking-tight text-foreground"
+          className="font-accent text-3xl font-semibold tracking-tight text-foreground"
         >
-          Create account
+          Create New Account
         </h1>
         <p className="mt-2 text-sm leading-6 text-muted">
-          Viewer access only. You cannot choose Owner or Administrator here.
+          Register as a Viewer. Owner and Administrator roles are assigned by
+          TrustVault administrators.
         </p>
 
-        <form className="mt-6 space-y-4" onSubmit={onSubmit} noValidate>
-          <div>
-            <label htmlFor={nameId} className="tv-label">
-              Full name
-            </label>
-            <div className="relative">
-              <UserRound
-                className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted"
-                strokeWidth={1.75}
-                aria-hidden
-              />
-              <input
-                id={nameId}
-                name="name"
-                type="text"
-                autoComplete="name"
-                required
-                value={name}
-                disabled={busy}
-                aria-invalid={nameInvalid || undefined}
-                onChange={(e) => setName(e.target.value)}
-                className={`tv-input pl-9 ${
-                  nameInvalid ? "border-danger focus:border-danger" : ""
-                }`}
-              />
-            </div>
-          </div>
+        <form className="mt-7 space-y-4" onSubmit={onSubmit} noValidate>
+          <AuthTextField
+            id={nameId}
+            label="Full name"
+            name="name"
+            type="text"
+            autoComplete="name"
+            required
+            value={name}
+            disabled={busy}
+            invalid={nameInvalid}
+            placeholder="Jane Doe"
+            leadingIcon={<UserRound className="h-4 w-4" strokeWidth={1.75} />}
+            onChange={(e) => setName(e.target.value)}
+          />
 
-          <div>
-            <label htmlFor={emailId} className="tv-label">
-              Work email
-            </label>
-            <div className="relative">
-              <Mail
-                className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted"
-                strokeWidth={1.75}
-                aria-hidden
-              />
-              <input
-                id={emailId}
-                name="email"
-                type="email"
-                autoComplete="email"
-                required
-                value={email}
-                disabled={busy}
-                aria-invalid={emailInvalid || undefined}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="you@company.com"
-                className={`tv-input pl-9 ${
-                  emailInvalid ? "border-danger focus:border-danger" : ""
-                }`}
-              />
-            </div>
-          </div>
+          <AuthTextField
+            id={emailId}
+            label="Email"
+            name="email"
+            type="email"
+            autoComplete="email"
+            required
+            value={email}
+            disabled={busy}
+            invalid={emailInvalid}
+            placeholder="you@example.com"
+            leadingIcon={<Mail className="h-4 w-4" strokeWidth={1.75} />}
+            onChange={(e) => setEmail(e.target.value)}
+          />
 
           <AuthPasswordField
             id={passwordId}
@@ -164,6 +138,7 @@ export default function SignupPage() {
             value={password}
             disabled={busy}
             invalid={passwordInvalid}
+            placeholder="••••••••"
             hint="At least 10 characters."
             onChange={(e) => setPassword(e.target.value)}
           />
@@ -178,6 +153,7 @@ export default function SignupPage() {
             value={confirm}
             disabled={busy}
             invalid={confirmInvalid}
+            placeholder="••••••••"
             onChange={(e) => setConfirm(e.target.value)}
           />
 
@@ -205,7 +181,7 @@ export default function SignupPage() {
             disabled={busy}
             aria-busy={busy}
             aria-describedby={error ? errorId : undefined}
-            className="w-full"
+            className="mt-1 w-full min-h-11 text-base"
           >
             {busy ? (
               <>
@@ -217,20 +193,31 @@ export default function SignupPage() {
                 Creating account…
               </>
             ) : (
-              "Create Viewer account"
+              <>
+                <UserPlus className="h-4 w-4" strokeWidth={1.75} aria-hidden />
+                Create Viewer Account
+              </>
             )}
           </Button>
         </form>
 
-        <p className="mt-5 text-center text-sm text-muted">
-          Already registered?{" "}
-          <Link
-            href="/"
-            className="font-semibold text-accent-strong underline decoration-accent/40 underline-offset-2 transition-colors duration-[180ms] hover:text-accent"
-          >
-            Sign in
-          </Link>
-        </p>
+        <div className="relative my-5 text-center" role="separator" aria-label="or">
+          <span className="absolute inset-x-0 top-1/2 h-px -translate-y-1/2 bg-border" />
+          <span className="relative bg-background px-3 text-xs font-semibold uppercase tracking-[0.12em] text-muted">
+            or
+          </span>
+        </div>
+
+        <Link
+          href="/"
+          className={buttonClassName({
+            variant: "secondary",
+            className:
+              "w-full min-h-11 border-accent/45 text-base text-accent-strong hover:border-accent hover:bg-accent-soft",
+          })}
+        >
+          Sign In
+        </Link>
       </section>
     </AuthSplitLayout>
   );

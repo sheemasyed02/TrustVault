@@ -202,7 +202,7 @@ export function DocumentPermissionsPanel({
           <Share2 className="h-5 w-5" strokeWidth={1.75} aria-hidden />
         </span>
         <div className="min-w-0">
-          <h2 className="text-lg font-semibold tracking-tight text-foreground">
+          <h2 className="font-accent text-lg font-semibold tracking-tight text-foreground">
             Sharing
           </h2>
           <p className="mt-1 text-sm text-muted">

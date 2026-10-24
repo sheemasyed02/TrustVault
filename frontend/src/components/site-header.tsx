@@ -22,7 +22,7 @@ export function SiteHeader() {
         <div className="flex items-center gap-3">
           <Link
             href="/"
-            className="flex items-center gap-2.5 text-xl font-semibold tracking-tight text-foreground focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent md:gap-3 md:text-2xl"
+            className="flex items-center gap-2.5 font-accent text-xl font-semibold tracking-tight text-foreground focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent md:gap-3 md:text-2xl"
           >
             <BrandLogo size="sm" decorative />
             TrustVault

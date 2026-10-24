@@ -159,7 +159,7 @@ export function DocumentPreview({
             <FileSearch className="h-5 w-5" strokeWidth={1.75} aria-hidden />
           </span>
           <div>
-            <h2 className="text-lg font-semibold tracking-tight text-foreground">
+            <h2 className="font-accent text-lg font-semibold tracking-tight text-foreground">
               Preview
             </h2>
             <p className="mt-1 text-muted">
@@ -181,7 +181,7 @@ export function DocumentPreview({
             <FileSearch className="h-5 w-5" strokeWidth={1.75} aria-hidden />
           </span>
           <div>
-            <h2 className="text-lg font-semibold tracking-tight text-foreground">
+            <h2 className="font-accent text-lg font-semibold tracking-tight text-foreground">
               {isPdf
                 ? "PDF preview (legacy)"
                 : canEditDocx

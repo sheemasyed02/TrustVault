@@ -1,78 +1,72 @@
-import {
-  FileKey2,
-  LockKeyhole,
-  ShieldCheck,
-  type LucideIcon,
-} from "lucide-react";
+import Image from "next/image";
 import type { ReactNode } from "react";
 
 import { BrandLogo } from "@/components/brand-logo";
+import { LOGIN_HERO_SRC } from "@/lib/brand-assets";
 
 interface AuthSplitLayoutProps {
-  /** Short Merienda welcome / decorative accent. */
-  welcome: string;
-  /** One concise Manrope supporting sentence. */
-  support: string;
+  /** Short welcome line shown under the hero image on large screens. */
+  welcome?: string;
+  /** Supporting sentence under the welcome line. */
+  support?: string;
   children: ReactNode;
   /** Optional mark for the marketing panel landmark. */
   marketingLabel?: string;
 }
 
-const accents: { Icon: LucideIcon; label: string }[] = [
-  { Icon: ShieldCheck, label: "Server-side access control" },
-  { Icon: LockKeyhole, label: "Named document permissions" },
-  { Icon: FileKey2, label: "Auditable activity trail" },
-];
-
 /**
- * Desktop split-screen auth chrome: ivory/lavender brand panel + white form column.
- * Mobile stacks brand summary above the form.
+ * Desktop split-screen auth chrome: login hero image + form column.
+ * Mobile stacks the image summary above the form.
  */
 export function AuthSplitLayout({
-  welcome,
-  support,
+  welcome = "Your data. Your control.",
+  support = "Accessed only by the right people.",
   children,
   marketingLabel = "TrustVault",
 }: AuthSplitLayoutProps) {
   return (
-    <div className="flex flex-1 flex-col lg:flex-row">
+    <div className="flex flex-1 flex-col bg-background lg:flex-row">
       <aside
         aria-label={marketingLabel}
-        className="relative flex flex-col justify-between overflow-hidden bg-accent-soft px-6 py-8 sm:px-10 sm:py-10 lg:w-[46%] lg:px-12 lg:py-14 xl:px-16"
+        className="relative flex flex-col overflow-hidden bg-[color-mix(in_srgb,var(--accent-soft)_70%,var(--background))] px-6 py-8 sm:px-10 sm:py-10 lg:w-[48%] lg:justify-between lg:px-12 lg:py-14 xl:px-16"
       >
         <div
-          className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_20%_0%,color-mix(in_srgb,var(--gold)_16%,transparent),transparent_48%),radial-gradient(ellipse_at_90%_80%,color-mix(in_srgb,var(--accent)_12%,transparent),transparent_42%)]"
+          className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_18%_12%,color-mix(in_srgb,var(--accent)_18%,transparent),transparent_52%),radial-gradient(ellipse_at_88%_78%,color-mix(in_srgb,var(--gold)_14%,transparent),transparent_46%)]"
           aria-hidden
         />
 
-        <div className="relative">
-          <div className="flex items-center gap-3">
-            <BrandLogo size="md" decorative priority />
-            <p className="text-xl font-semibold tracking-tight text-foreground">
+        <div className="relative flex items-center gap-3">
+          <BrandLogo size="md" decorative priority />
+          <div className="min-w-0">
+            <p className="font-accent text-xl font-semibold tracking-tight text-foreground">
               TrustVault
             </p>
+            <p className="mt-0.5 text-xs font-medium text-muted sm:text-sm">
+              Secure Documents. Trusted Access.
+            </p>
           </div>
-          <p className="mt-8 max-w-sm font-accent text-2xl leading-snug text-foreground sm:text-3xl">
+        </div>
+
+        <div className="relative mx-auto mt-8 flex w-full max-w-md flex-1 flex-col items-center justify-center lg:mt-0 lg:max-w-lg">
+          <div className="relative w-full max-w-[22rem] sm:max-w-[26rem] lg:max-w-[28rem]">
+            <Image
+              src={LOGIN_HERO_SRC}
+              alt=""
+              width={1120}
+              height={840}
+              priority
+              unoptimized
+              className="h-auto w-full object-contain drop-shadow-[0_18px_40px_rgba(95,90,139,0.18)]"
+              aria-hidden
+            />
+          </div>
+          <p className="mt-6 max-w-sm text-center font-accent text-xl leading-snug text-foreground sm:text-2xl">
             {welcome}
           </p>
-          <p className="mt-3 max-w-sm text-sm leading-6 text-muted sm:text-base">
+          <p className="mt-2 max-w-sm text-center text-sm leading-6 text-muted sm:text-base">
             {support}
           </p>
         </div>
-
-        <ul className="relative mt-10 hidden flex-col gap-3 sm:flex lg:mt-0 lg:gap-4">
-          {accents.map(({ Icon, label }) => (
-            <li
-              key={label}
-              className="flex items-center gap-3 rounded-[0.875rem] border border-border/80 bg-surface/70 px-3.5 py-3 shadow-[var(--shadow-sm)] backdrop-blur-[2px]"
-            >
-              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[0.625rem] bg-sidebar text-gold">
-                <Icon className="h-4 w-4" strokeWidth={1.75} aria-hidden />
-              </span>
-              <span className="text-sm font-medium text-foreground">{label}</span>
-            </li>
-          ))}
-        </ul>
       </aside>
 
       <div className="flex flex-1 items-center justify-center bg-background px-4 py-8 sm:px-8 sm:py-12 lg:px-10 lg:py-14">
