@@ -8,6 +8,8 @@ Hiding a button in the UI is not authorization. The API re-loads the user and gr
 
 **Live application:** [https://trustvault-sheema.vercel.app/](https://trustvault-sheema.vercel.app/)
 
+**Demo Video URL:** [https://drive.google.com/file/d/1N-8_JIU9YzPnd69B-49wGeJSlpsSO-tY/view?usp=sharing](https://drive.google.com/file/d/1N-8_JIU9YzPnd69B-49wGeJSlpsSO-tY/view?usp=sharing)
+
 | | |
 | --- | --- |
 | Repository | [github.com/sheemasyed02/TrustVault](https://github.com/sheemasyed02/TrustVault) |
@@ -139,9 +141,9 @@ To test forgot email, the email must be valid and real one.
 
 | Role | Login email | Password | What to explore |
 | --- | --- | --- | --- |
-| Admin | `snovasys@trustvault.demo` | `[admin123456789]` | Admin overview, users, audit events, integrity, promotions |
-| Owner | `sheema@trustvault.demo` | `[owner123456789]` | Upload, share/revoke, metadata, soft-delete |
-| Viewer | `user@trustvault.demo` | `[viewer123456789]` | Shared With Me, READ/EDIT limits, promotion request |
+| Admin | `snovasys@trustvault.demo` | `admin123456789` | Admin overview, users, audit events, integrity, promotions |
+| Owner | `sheema@trustvault.demo` | `owner123456789` | Upload, share/revoke, metadata, soft-delete |
+| Viewer | `user@trustvault.demo` | `viewer123456789` | Shared With Me, READ/EDIT limits, promotion request |
 
 Additional seeded emails (same role passwords as above when seeded): owners `raj@` / `priya@`; viewers `alex@` / `jordan@` (`@trustvault.demo`).
 
